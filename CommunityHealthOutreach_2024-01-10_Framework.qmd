@@ -1,0 +1,393 @@
+---
+title: "Community Health Outreach Framework"
+subtitle: ""
+author: 
+  name: "John Ryan Kivela, MA"
+  email: "Ryan.Kivela@narbha.org"
+  affiliation: "The Alliance ACO"
+date: today
+date-format: long
+format:
+  html:
+    theme: pulse
+    embed-resources: true
+    toc: true
+    toc-depth: 6
+    code-fold: true
+    footnotes-hover: true
+---
+
+This document provides the data framework for the Community Health Outreach project. The core datasets used in that evaluation are collected through the code herein. 
+
+# Set Up
+
+```{r}
+#| label: Setup
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+## Load Libraries
+library(tidyverse)
+library(readxl)
+library(odbc)
+
+# Set up ODBC Connection
+QRPTP01 <- DBI::dbConnect(odbc::odbc(),"AllianceData")
+
+# Create table for inline code
+InLineCode <- data.frame(
+  Column1 = "text")
+
+# Vector of Alliance Provider Name
+Provider_ShortName <- (c("CBI", "CPIH", "EHS", "LCBHC", "MMHC", "SHG", "SBH", "TGC", "WYGC"))
+
+# Vector of NAZ Counties
+NAZ_Counties <- (c("Apache", "Coconino", "Mohave", "Navajo", "Yavapai"))
+
+# Create provider shortnames based on TIN
+# Create a data frame called ProviderShortnames
+ProviderTIN <- 
+  data.frame(
+  BHHProvider_TIN = c("86-0206928", "86-0207499", "86-0214457", "86-0215065", "86-0223720", "86-0250938", "86-0290033", "86-0473221", "94-2880847"),
+  BHHShortName = c("PH", "SHG", "MMHC", "CPIH", "TGC", "LCBHC", "SBH", "EHS", "CBI")
+  )
+
+```
+
+# Enrollments
+
+The next few code sets queries the HCA data bases to gather data from the Global Members Data base.
+
+## Enrollment Roster
+
+```{sql, connection = QRPTP01, output.var = "GM_Enrollments_AllACC"}
+#| label: AHCCCS Enrollments
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+# This is the source of truth for enrollment start and end dates
+
+declare @AzACC int = narbha.dbo.ufn_GetIntLobIdFromLobName('ArizonaAcc', getdate());
+
+declare @AzRbha int = narbha.dbo.ufn_GetIntLobIdFromLobName('AzRBHA', getdate());
+
+declare @AzSO int = narbha.dbo.ufn_GetIntLobIdFromLobName('AZ State Only', getdate());
+
+declare @AzHCIC int = narbha.dbo.ufn_GetIntLobIdFromLobName('HCIC', getdate());
+
+SELECT * 
+
+FROM GlobalMembers.dbo.Enrollments 
+
+WHERE lobid = @AzACC 
+  AND void = 0 
+  
+ORDER BY PrimaryId , EnrollmentDate DESC
+
+```
+
+```{r}
+#| label: Write AHCCCS Enrollments
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+## Write to CSV
+# write.csv(Enrollments_AllACC, "./data/input/Enrollments_AllACC.csv")
+
+```
+
+## All AZ Enrollments Data
+
+```{sql, connection = QRPTP01, output.var = "GM_ALLAZ_Enrollments"}
+#| label: GM All AZ Enrollments
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+SELECT * 
+
+FROM GlobalMembers.dbo.DailyMemberShipAllArizonaEnrollments
+
+WHERE void = 0 
+  
+ORDER BY PrimaryId
+```
+
+```{r}
+#| label: Write GM All AZ Enrollments
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+## Write to CSV
+# write.csv(GM_ALLAZ_Enrollments, "./data/input/GM_AllAZ_Enrollments.csv")
+
+```
+
+## All AZ Addresses Data
+
+```{sql, connection = QRPTP01, output.var = "GM_ALLAZ_Addresses"}
+#| label: GM All AZ Addresses
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+SELECT * 
+
+FROM GlobalMembers.dbo.DailyMemberShipAllArizonaAddresses
+
+WHERE Void = 0 
+  
+```
+
+```{r}
+#| label: Write GM All AZ Addresses
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+## Write to CSV
+# write.csv(GM_ALLAZ_Addresses, "./data/input/GM_AllAZ_Addresses.csv")
+
+```
+
+
+## Client Demographics
+
+```{sql, connection = QRPTP01, output.var = "GM_Clients_Demographics"}
+#| label: Client Demograhics
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+declare @AzACC int = narbha.dbo.ufn_GetIntLobIdFromLobName('ArizonaAcc', getdate());
+
+declare @AzRbha int = narbha.dbo.ufn_GetIntLobIdFromLobName('AzRBHA', getdate());
+
+declare @AzSO int = narbha.dbo.ufn_GetIntLobIdFromLobName('AZ State Only', getdate());
+
+declare @AzHCIC int = narbha.dbo.ufn_GetIntLobIdFromLobName('HCIC', getdate());
+
+SELECT * 
+
+FROM GlobalMembers.dbo.Clients
+
+WHERE lobid = @AzACC 
+  AND void = 0 
+  
+ORDER BY LastName DESC
+
+```
+
+```{r}
+#| label: Write Client Demographics
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+## Write to CSV
+# write.csv(Clients_Demographics_AllACC, "./data/input/Clients.csv")
+
+```
+
+## Enrollment Calculation
+
+```{r}
+#| label: Enrollment
+#| eval: true
+#| include: true
+#| echo: true
+#| warning: false
+#| error: false
+
+# Identify Alliance Membership
+
+# Merge Enrollment files from HCA global members database. The source data for this is futher outlined inthe Framework document. 
+AllianceEnrolledMembers_Merge <-
+  merge(x = GM_Enrollments_AllACC,
+        y = GM_Clients_Demographics,
+        by = "PrimaryId",
+        all.x = TRUE)
+  
+AllianceEnrolledMembers_Merge <-  
+  AllianceEnrolledMembers_Merge |> 
+  filter(Void.x == FALSE & Void.y == FALSE) |>  # FALSE = The record has not be voided
+  select(
+    PrimaryId,
+    LastName,
+    FirstName,
+    EnrollmentDate,
+    DisenrollmentDate,
+    DOB,
+    DOD,
+    Sex,
+    MaritalStatus,
+    Race,
+    Ethnicity,
+    SpokenLanguage,
+    NativeLanguage
+  )
+
+AllianceEnrolledMembers_Merge <-
+  merge(x = AllianceEnrolledMembers_Merge,
+        y = GM_ALLAZ_Enrollments, # Adds Provider_Shortname
+        by = "PrimaryId",
+        all.x = TRUE)
+
+AllianceEnrolledMembers_Merge <-
+  merge(x = AllianceEnrolledMembers_Merge,
+        y = ProviderTIN, # Add provider TIN
+        by = "BHHShortName",
+        all.x = TRUE)
+
+AllianceEnrolledMembers_Merge <-
+  AllianceEnrolledMembers_Merge |> 
+  select(
+    PrimaryId,
+    LastName,
+    FirstName,
+    BHHShortName,
+    BHHLongName,
+    BHHProvider_TIN,
+    EnrollmentDate.x,
+    DisenrollmentDate.x,
+    DOB,
+    DOD,
+    Sex,
+    MaritalStatus,
+    Race,
+    Ethnicity,
+    SpokenLanguage,
+    NativeLanguage,
+    LineOfBusiness
+  )
+
+AllianceEnrolledMembers_Merge <-
+  merge(x = AllianceEnrolledMembers_Merge,
+        y = GM_ALLAZ_Addresses, # adds address info
+        by = "PrimaryId",
+        all.x = TRUE)
+
+
+AllianceEnrolledMembers_Merge <- 
+  AllianceEnrolledMembers_Merge |> 
+  select(
+    PrimaryId,
+    LastName,
+    FirstName,
+    BHHShortName,
+    BHHLongName,
+    BHHProvider_TIN,
+    EnrollmentDate.x,
+    DisenrollmentDate.x,
+    DOB,
+    DOD,
+    Sex,
+    MaritalStatus,
+    Race,
+    Ethnicity,
+    SpokenLanguage,
+    NativeLanguage,
+    ResCountyName, # Senior finance leaders report this field may not be 100% reliable
+    ResCity, # Same
+    ResEffDate,
+    HomePhone,
+    EmergencyPhone,
+    EmailAddress
+  )
+
+
+
+# Trim extra spaces at end of rescountyname
+AllianceEnrolledMembers_Merge$ResCountyName <-
+  trimws(AllianceEnrolledMembers_Merge$ResCountyName)
+
+# This is a data set containing enrollment information for all ACC members with either enrolled or disenrolled status
+# Next, we make it just Alliance Members
+
+# Filter for The Alliance Providers
+# This is about 382,000 people
+AllianceEnrolledMembers <-
+  AllianceEnrolledMembers_Merge |> 
+  filter(BHHShortName %in% Provider_ShortName)
+
+# Then filter for the 5 northern counties
+# This is about 311,465 people
+AllianceEnrolledMembers <-
+  AllianceEnrolledMembers |> 
+  filter(ResCountyName %in% NAZ_Counties)
+
+# Filter out dead people (no offense intended)
+# This is about 305,673 people
+AllianceEnrolledMembers <-
+  AllianceEnrolledMembers |> 
+  filter(is.na(DOD))
+
+# This table is the record of all living individuals who have had an enrollment with BCBS HCA ACC health plan who are auto-assigned to an Alliance Provider, and who have a residential address in the northern GSA counties.
+
+# Drop the Enrolled Members Merge file because we don't need non-Alliance Members for this
+# rm(AllianceEnrolledMembers_Merge)
+
+## Write to CSV
+# write.csv(AllianceEnrolledMembers, "./data/output/AllianceEnrolledMembers.csv")
+
+```
+
+# Claims
+
+These next few codes sets query the HCA databases for claims data for all types of claims.
+
+## All claims from VOS table
+
+```{sql, connection = QRPTP01, output.var = "Claims_AllHCA"}
+#| label: BH Claims
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+Declare @start as date = '10-01-2022'
+Declare @end as date = '12-31-2022'
+
+SELECT *
+
+FROM Claims.dbo.shcaVos
+
+WHERE BegDate BETWEEN @start AND @end
+
+```
+
+```{r}
+#| label: Write Claims All HCA
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+## Write to CSV
+# write.csv(Claims_AllHCA, "./data/output/Claims_AllHCA.csv")
+```
+

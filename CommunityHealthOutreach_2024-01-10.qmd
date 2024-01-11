@@ -1,0 +1,62 @@
+---
+title: "Community Health Outreach"
+subtitle: ""
+author: 
+  name: "John Ryan Kivela, MA"
+  email: "Ryan.Kivela@narbha.org"
+  affiliation: "The Alliance ACO"
+date: today
+date-format: long
+format:
+  html:
+    theme: pulse
+    embed-resources: true
+    toc: true
+    toc-depth: 6
+    code-fold: true
+    footnotes-hover: true
+---
+
+This document provides the data framework for the Community Health Outreach project. The core datasets used in that evaluation are collected through the code herein. 
+
+# Set Up
+
+```{r}
+#| label: Setup
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+## Load Libraries
+library(tidyverse)
+library(readxl)
+#library(kableExtra)
+#library(gt)
+#library(scales)
+#library(utils)
+#library(lubridate)
+#library(RODBC)
+#library(DBI)
+library(odbc)
+#library(dbplyr)
+
+# Set up ODBC Connection
+QRPTP01 <- DBI::dbConnect(odbc::odbc(),"AllianceData")
+
+# Create table for inline code
+InLineCode <- data.frame(
+  Column1 = "text")
+
+# Vector of Alliance Provider Name
+Provider_ShortName <- (c("CBI", "CPIH", "EHS", "LCBHC", "MMHC", "SHG", "SBH", "TGC", "WYGC"))
+
+# Vector of NAZ Counties
+NAZ_Counties <- (c("Apache", "Coconino", "Mohave", "Navajo", "Yavapai"))
+
+```
+
+```{r}
+
+```
