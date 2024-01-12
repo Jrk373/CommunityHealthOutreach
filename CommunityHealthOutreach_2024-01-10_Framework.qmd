@@ -251,9 +251,13 @@ AllianceEnrolledMembers_Merge <-
 
 AllianceEnrolledMembers_Merge <-
   merge(x = AllianceEnrolledMembers_Merge,
-        y = GM_ALLAZ_Enrollments, # Adds Provider_Shortname
+        y = GM_ALLAZ_Enrollments, # Adds  and AHCCCSID
         by = "PrimaryId",
         all.x = TRUE)
+
+AllianceEnrolledMembers_Merge <-
+  AllianceEnrolledMembers_Merge |> 
+  rename("AHCCCSID" = AhcccsId)
 
 AllianceEnrolledMembers_Merge <-
   merge(x = AllianceEnrolledMembers_Merge,
@@ -261,10 +265,15 @@ AllianceEnrolledMembers_Merge <-
         by = "BHHShortName",
         all.x = TRUE)
 
+# remove hyphen in TIN
+AllianceEnrolledMembers_Merge$BHHProvider_TIN <- gsub("-", "", AllianceEnrolledMembers_Merge$BHHProvider_TIN)
+
+
 AllianceEnrolledMembers_Merge <-
   AllianceEnrolledMembers_Merge |> 
   select(
     PrimaryId,
+    AHCCCSID,
     LastName,
     FirstName,
     BHHShortName,
@@ -289,11 +298,11 @@ AllianceEnrolledMembers_Merge <-
         by = "PrimaryId",
         all.x = TRUE)
 
-
 AllianceEnrolledMembers_Merge <- 
   AllianceEnrolledMembers_Merge |> 
   select(
     PrimaryId,
+    AHCCCSID,
     LastName,
     FirstName,
     BHHShortName,

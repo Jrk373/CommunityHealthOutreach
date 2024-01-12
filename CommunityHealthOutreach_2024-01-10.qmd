@@ -32,15 +32,7 @@ This document provides the data framework for the Community Health Outreach proj
 ## Load Libraries
 library(tidyverse)
 library(readxl)
-#library(kableExtra)
-#library(gt)
-#library(scales)
-#library(utils)
-#library(lubridate)
-#library(RODBC)
-#library(DBI)
 library(odbc)
-#library(dbplyr)
 
 # Set up ODBC Connection
 QRPTP01 <- DBI::dbConnect(odbc::odbc(),"AllianceData")
@@ -58,5 +50,69 @@ NAZ_Counties <- (c("Apache", "Coconino", "Mohave", "Navajo", "Yavapai"))
 ```
 
 ```{r}
+# Select variables to analyze
+Claims_filtered <-
+  Claims_AllHCA |> 
+  select(
+    Icnno,
+    PrimaryID,
+    AHCCCSID,
+    Age,
+    Age_Group,
+    Population,
+    RA,
+    Svccode,
+    BegDate,
+    PrimaryDiagnosis,
+    ProviderName,
+    Fedtaxid,
+    RenderingProviderNpi,
+    PayContract,
+    Placesvc,
+    ProviderType,
+    Dx1, Dx2, DX3, Dx4, Dx5, DX6,
+    Dx7, Dx8, DX9, Dx10, Dx11, DX12,
+    Calcnetpd,
+    MemberACCGSA,
+    MemberServiceArea,
+    MemberZipcode,
+    RenderingProviderServiceArea,
+    MedicationName,
+    MedicationGPI,
+    MedicationNDC,
+    EncounterStatus,
+    EncounterStatusDate
+  )
+
+# Filter for Alliance Members Only
+Claims_AllAlliance <-
+  Claims_filtered |> 
+  filter(AHCCCSID %in% AllianceEnrolledMembers$AHCCCSID)
+
+Analysis <-
+  merge(x = AllianceEnrolledMembers,
+        y = Claims_AllAlliance,
+        by = "AHCCCSID",
+        all.x = TRUE)
+
+library(stringr)
+
+Analysis <- Analysis %>%
+  mutate_all(str_squish)
+
+Analysis <-
+  Analysis |> 
+  mutate(SvcByAssignedBHHTIN = if_else(BHHProvider_TIN == Fedtaxid, 1, 0))
+
+check <-
+  Analysis |> 
+  select(
+    AHCCCSID,
+    BHHProvider_TIN,
+    RA,
+    Fedtaxid,
+    ProviderName,
+    SvcByAssignedBHHTIN
+  )
 
 ```
