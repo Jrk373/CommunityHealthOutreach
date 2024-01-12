@@ -35,7 +35,7 @@ library(readxl)
 library(odbc)
 
 # Set up ODBC Connection
-QRPTP01 <- DBI::dbConnect(odbc::odbc(),"AllianceData")
+# QRPTP01 <- DBI::dbConnect(odbc::odbc(),"AllianceData")
 
 # Create table for inline code
 InLineCode <- data.frame(

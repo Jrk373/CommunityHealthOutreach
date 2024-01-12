@@ -33,9 +33,12 @@ This document provides the data framework for the Community Health Outreach proj
 library(tidyverse)
 library(readxl)
 library(odbc)
+library(stringr)
 
 # Set up ODBC Connection
 QRPTP01 <- DBI::dbConnect(odbc::odbc(),"AllianceData")
+
+options(width = 999)
 
 # Create table for inline code
 InLineCode <- data.frame(
@@ -50,7 +53,7 @@ NAZ_Counties <- (c("Apache", "Coconino", "Mohave", "Navajo", "Yavapai"))
 ```
 
 ```{r}
-# Select variables to analyze
+# Select variables to analyze from the claims data
 Claims_filtered <-
   Claims_AllHCA |> 
   select(
@@ -89,30 +92,43 @@ Claims_AllAlliance <-
   Claims_filtered |> 
   filter(AHCCCSID %in% AllianceEnrolledMembers$AHCCCSID)
 
+# merge the claims data with the enrollment data
 Analysis <-
-  merge(x = AllianceEnrolledMembers,
-        y = Claims_AllAlliance,
+  merge(x = Claims_AllAlliance,
+        y = AllianceEnrolledMembers,
         by = "AHCCCSID",
-        all.x = TRUE)
+        all.y = TRUE)
 
-library(stringr)
+# Filter for only adjudicated paid claims
+Analysis <- 
+  Analysis |> 
+  filter(EncounterStatus == "AP")
 
-Analysis <- Analysis %>%
+# Remove some extra variables that we don't need right now
+Analysis <- 
+  Analysis [, -c(6, 14, 30, 31, 33, 35, 36, 37, 38, 40, 44, 49, 51)]
+
+# Remove any rogues spaces in any field in the data
+Analysis <- Analysis |> 
   mutate_all(str_squish)
 
+# Indicaters for services by the HH or not by the HH
 Analysis <-
   Analysis |> 
-  mutate(SvcByAssignedBHHTIN = if_else(BHHProvider_TIN == Fedtaxid, 1, 0))
+  mutate(SvcByAssignedBHHTIN = if_else(BHHProvider_TIN == Fedtaxid, 1, 0)) |> 
+  mutate(SvcByOtherTIN = if_else(BHHProvider_TIN != Fedtaxid, 1, 0))
 
-check <-
-  Analysis |> 
-  select(
-    AHCCCSID,
-    BHHProvider_TIN,
-    RA,
-    Fedtaxid,
-    ProviderName,
-    SvcByAssignedBHHTIN
-  )
+
+# check <-
+#   Analysis |> 
+#   select(
+#     AHCCCSID,
+#     BHHProvider_TIN,
+#     RA,
+#     Fedtaxid,
+#     ProviderName,
+#     SvcByAssignedBHHTIN,
+#     SvcByOtherTIN
+#   )
 
 ```
