@@ -21,6 +21,8 @@ This document provides the data framework for the Community Health Outreach proj
 
 # Set Up
 
+This code sets up the project, installing libraries, setting parameters for the renderred document, and creating various tables and vectors of data that will be incorporated later.
+
 ```{r}
 #| label: Setup
 #| eval: true
@@ -62,6 +64,8 @@ ProviderTIN <-
 The next few code sets queries the HCA data bases to gather data from the Global Members Data base.
 
 ## Enrollment Roster
+
+The table GlobalMembers.dbo.Enrollments is the primary source for member enrollment. This table is used as the foundation of the membership enrollment roster and provides us with unique identifiers and all enrollment segments for an individual.
 
 ```{sql, connection = QRPTP01, output.var = "GM_Enrollments_AllACC"}
 #| label: AHCCCS Enrollments
@@ -398,5 +402,13 @@ WHERE BegDate BETWEEN @start AND @end
 
 ## Write to CSV
 # write.csv(Claims_AllHCA, "./data/output/Claims_AllHCA.csv")
+```
+
+# VBP Quality Roster
+
+This is an aggregation of all of the VBP Quality Roster data for all of the providers.
+
+```{r}
+VBPQR_AllRecords <- read.csv("./data/input/Data_VBPQR_AllRecords.csv")
 ```
 

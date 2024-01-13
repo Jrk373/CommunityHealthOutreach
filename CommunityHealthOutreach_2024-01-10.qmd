@@ -36,8 +36,9 @@ library(odbc)
 library(stringr)
 
 # Set up ODBC Connection
-QRPTP01 <- DBI::dbConnect(odbc::odbc(),"AllianceData")
+# QRPTP01 <- DBI::dbConnect(odbc::odbc(),"AllianceData")
 
+# adjust to allow viewing of more columns
 options(width = 999)
 
 # Create table for inline code
@@ -51,6 +52,55 @@ Provider_ShortName <- (c("CBI", "CPIH", "EHS", "LCBHC", "MMHC", "SHG", "SBH", "T
 NAZ_Counties <- (c("Apache", "Coconino", "Mohave", "Navajo", "Yavapai"))
 
 ```
+
+Create a indicator for if on VBPQR
+
+```{r}
+
+VBPQR_filtered <-
+  VBPQR_AllRecords |> 
+  select(
+    ClaimsAdjudicatedThrough,
+    AllianceProviderTIN,
+    ProviderShortname,
+    MemberID,
+    MeasureID,
+    GapStatus
+  ) |> 
+  rename("AHCCCSID" = MemberID) |> 
+  filter(MeasureID != "HDO")
+
+# Step 1: Filter for only the most recent ClaimsAdjudicatedThrough date
+VBPQR_filtered <- VBPQR_filtered |>
+  group_by(AHCCCSID) |>
+  filter(ClaimsAdjudicatedThrough == max(ClaimsAdjudicatedThrough))
+
+# Step 2: Create new columns "AMM", "FUH", and "FUM"
+VBPQR_filtered <- VBPQR_filtered |>
+  mutate(AMM = NA, FUH = NA, FUM = NA)
+
+# Step 3: Update new columns based on MeasureID
+VBPQR_filtered$AMM[VBPQR_filtered$MeasureID == "AMM"] <- VBPQR_filtered$GapStatus[VBPQR_filtered$MeasureID == "AMM"]
+VBPQR_filtered$FUH[VBPQR_filtered$MeasureID == "FUH"] <- VBPQR_filtered$GapStatus[VBPQR_filtered$MeasureID == "FUH"]
+VBPQR_filtered$FUM[VBPQR_filtered$MeasureID == "FUM"] <- VBPQR_filtered$GapStatus[VBPQR_filtered$MeasureID == "FUM"]
+
+# Collapse data to one row per AHCCCSID
+collapsed_data <- VBPQR_filtered |>
+  group_by(AHCCCSID) |>
+  summarize(
+    AMM = max(AMM, na.rm = TRUE),
+    FUH = max(FUH, na.rm = TRUE),
+    FUM = max(FUM, na.rm = TRUE)
+  )
+
+Analysis <-
+  merge(x = AllianceEnrolledMembers,
+        y = collapsed_data,
+        by = "AHCCCSID",
+        all.x = TRUE)
+
+```
+
 
 ```{r}
 # Select variables to analyze from the claims data
@@ -95,9 +145,9 @@ Claims_AllAlliance <-
 # merge the claims data with the enrollment data
 Analysis <-
   merge(x = Claims_AllAlliance,
-        y = AllianceEnrolledMembers,
+        y = Analysis,
         by = "AHCCCSID",
-        all.y = TRUE)
+        all = TRUE)
 
 # Filter for only adjudicated paid claims
 Analysis <- 
@@ -132,3 +182,4 @@ Analysis <-
 #   )
 
 ```
+
