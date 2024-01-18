@@ -19,7 +19,9 @@ format:
 
 This document provides the data framework for the Community Health Outreach project. The core datasets used in that evaluation are collected through the code herein. 
 
-# Set Up
+# Method
+
+## r Setup
 
 ```{r}
 #| label: Setup
@@ -40,7 +42,11 @@ library(stringr)
 
 # adjust to allow viewing of more columns
 options(width = 999)
+```
 
+## Common Objects
+
+```{r}
 # Create table for inline code
 InLineCode <- data.frame(
   Column1 = "text")
@@ -53,7 +59,9 @@ NAZ_Counties <- (c("Apache", "Coconino", "Mohave", "Navajo", "Yavapai"))
 
 ```
 
-Create a indicator for if on VBPQR
+## Procedure
+
+### Create an indicator for if on VBPQR
 
 ```{r}
 
@@ -93,6 +101,7 @@ collapsed_data <- VBPQR_filtered |>
     FUM = max(FUM, na.rm = TRUE)
   )
 
+# Attach VBP data to enrollment data
 Analysis <-
   merge(x = AllianceEnrolledMembers,
         y = collapsed_data,
@@ -168,9 +177,10 @@ Analysis <-
   mutate(SvcByAssignedBHHTIN = if_else(BHHProvider_TIN == Fedtaxid, 1, 0)) |> 
   mutate(SvcByOtherTIN = if_else(BHHProvider_TIN != Fedtaxid, 1, 0))
 
+write.csv(Analysis, "./data/output/CHO_AllianceEnrolledMembers.csv")
 
 # check <-
-#   Analysis |> 
+#   Analysis |>
 #   select(
 #     AHCCCSID,
 #     BHHProvider_TIN,

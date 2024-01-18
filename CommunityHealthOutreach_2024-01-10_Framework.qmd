@@ -19,9 +19,11 @@ format:
 
 This document provides the data framework for the Community Health Outreach project. The core datasets used in that evaluation are collected through the code herein. 
 
-# Set Up
+# Method
 
 This code sets up the project, installing libraries, setting parameters for the renderred document, and creating various tables and vectors of data that will be incorporated later.
+
+## r Setup
 
 ```{r}
 #| label: Setup
@@ -39,6 +41,11 @@ library(odbc)
 # Set up ODBC Connection
 # QRPTP01 <- DBI::dbConnect(odbc::odbc(),"AllianceData")
 
+```
+
+## Common Objects
+
+```{r}
 # Create table for inline code
 InLineCode <- data.frame(
   Column1 = "text")
@@ -59,11 +66,11 @@ ProviderTIN <-
 
 ```
 
-# Enrollments
+## Enrollments
 
 The next few code sets queries the HCA data bases to gather data from the Global Members Data base.
 
-## Enrollment Roster
+### Enrollment Roster
 
 The table GlobalMembers.dbo.Enrollments is the primary source for member enrollment. This table is used as the foundation of the membership enrollment roster and provides us with unique identifiers and all enrollment segments for an individual.
 
@@ -109,7 +116,7 @@ ORDER BY PrimaryId , EnrollmentDate DESC
 
 ```
 
-## All AZ Enrollments Data
+### All AZ Enrollments Data
 
 ```{sql, connection = QRPTP01, output.var = "GM_ALLAZ_Enrollments"}
 #| label: GM All AZ Enrollments
@@ -141,7 +148,7 @@ ORDER BY PrimaryId
 
 ```
 
-## All AZ Addresses Data
+### All AZ Addresses Data
 
 ```{sql, connection = QRPTP01, output.var = "GM_ALLAZ_Addresses"}
 #| label: GM All AZ Addresses
@@ -173,7 +180,7 @@ WHERE Void = 0
 ```
 
 
-## Client Demographics
+### Client Demographics
 
 ```{sql, connection = QRPTP01, output.var = "GM_Clients_Demographics"}
 #| label: Client Demograhics
@@ -215,7 +222,30 @@ ORDER BY LastName DESC
 
 ```
 
-## Enrollment Calculation
+### Claims for last service
+
+```{sql, connection = QRPTP01, output.var = "LastService"}
+
+WITH RankedClaims AS (
+    SELECT
+        PrimaryID,
+        BegDate,
+        ProviderName,
+		ProviderType,
+        ROW_NUMBER() OVER (PARTITION BY PrimaryID ORDER BY BegDate DESC) AS rn
+    FROM claims.dbo.shcavos
+    --WHERE BegDate >= @start AND BegDate <= @end
+)
+SELECT PrimaryID, BegDate, ProviderName
+FROM RankedClaims
+WHERE rn = 1
+    AND ProviderType IN ('02','29', '64', '63', '71', 
+	'77', '78', 'A3', 'A5', 'A6', 'B1', 'B2', 'B3', 
+	'B5', 'B6', 'B7', 'B8', 'C2', 'C5', 'IC')
+
+```
+
+### Enrollment Calculation
 
 ```{r}
 #| label: Enrollment
@@ -357,6 +387,11 @@ AllianceEnrolledMembers <-
   AllianceEnrolledMembers |> 
   filter(is.na(DOD))
 
+# Filter out end dated enrollment segments
+AllianceEnrolledMembers <-
+  AllianceEnrolledMembers |> 
+  filter(is.na(DisenrollmentDate.x))
+
 # This table is the record of all living individuals who have had an enrollment with BCBS HCA ACC health plan who are auto-assigned to an Alliance Provider, and who have a residential address in the northern GSA counties.
 
 # Drop the Enrolled Members Merge file because we don't need non-Alliance Members for this
@@ -367,11 +402,30 @@ AllianceEnrolledMembers <-
 
 ```
 
-# Claims
+### Last Service
+
+```{r}
+# Add last service
+
+LastService <-
+  LastService |> 
+  rename("PrimaryId" = PrimaryID,
+         "DateLastService" = BegDate,
+         "LastServiceProvider" = ProviderName)
+
+AllianceEnrolledMembers <- 
+  merge(x = AllianceEnrolledMembers,
+        y = LastService,
+        by = "PrimaryId",
+        all.x = TRUE)
+
+```
+
+## Claims
 
 These next few codes sets query the HCA databases for claims data for all types of claims.
 
-## All claims from VOS table
+### All claims from VOS table
 
 ```{sql, connection = QRPTP01, output.var = "Claims_AllHCA"}
 #| label: BH Claims
@@ -404,11 +458,13 @@ WHERE BegDate BETWEEN @start AND @end
 # write.csv(Claims_AllHCA, "./data/output/Claims_AllHCA.csv")
 ```
 
-# VBP Quality Roster
+## VBP Quality Roster
 
 This is an aggregation of all of the VBP Quality Roster data for all of the providers.
 
 ```{r}
+
+# This is a simple import from the ValueBasedData model. The code can be replicated here when we have time to polish. For now, this is the most recent data for VBP available.
 VBPQR_AllRecords <- read.csv("./data/input/Data_VBPQR_AllRecords.csv")
 ```
 
