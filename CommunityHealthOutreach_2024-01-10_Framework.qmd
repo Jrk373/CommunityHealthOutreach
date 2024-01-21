@@ -39,16 +39,23 @@ library(readxl)
 library(odbc)
 
 # Set up ODBC Connection
-# QRPTP01 <- DBI::dbConnect(odbc::odbc(),"AllianceData")
+QRPTP01 <- DBI::dbConnect(odbc::odbc(),"AllianceData")
 
 ```
 
 ## Common Objects
 
 ```{r}
+#| label: Create Common Objects
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
 # Create table for inline code
-InLineCode <- data.frame(
-  Column1 = "text")
+# InLineCode <- data.frame(
+#   Column1 = "text")
 
 # Vector of Alliance Provider Name
 Provider_ShortName <- (c("CBI", "CPIH", "EHS", "LCBHC", "MMHC", "SHG", "SBH", "TGC", "WYGC"))
@@ -64,6 +71,30 @@ ProviderTIN <-
   BHHShortName = c("PH", "SHG", "MMHC", "CPIH", "TGC", "LCBHC", "SBH", "EHS", "CBI")
   )
 
+# Create a list with the ultimate column names for the data
+VBPTrendReport_colnames <- 
+  c("ClaimsAdjudicatedThrough",
+    "AllianceProviderTIN",
+    "ProviderShortname",
+    "HealthHomeName",
+    "MemberID",
+    "LastName",
+    "FirstName",
+    "MeasureID",
+    "Measure",
+    "GapStatus")
+
+# COntract Measures List
+ContractMeasures <- c("AMM", "FUH", "FUM", "HDO", "FUA")
+
+# HEDIS Value Sets
+MyHEDIS2023_AllValueSetsToCodes <- read_xlsx("./documents/M. HEDIS MY 2023 Volume 2 Value Set Directory 2023-03-31 - Copy.xlsx", sheet = "Value Sets to Codes")
+
+MyHEDIS2023_MedicationDirectory <- read_xlsx("./documents/HEDIS MY 2023 Medication List Directory 2023-03-31.xlsx", sheet = "Medication Lists to Codes")
+
+# Z Codes
+Z_Codes <- read_xlsx("./documents/Z-Codes.xlsx", sheet = "Sheet1")
+
 ```
 
 ## Enrollments
@@ -75,22 +106,16 @@ The next few code sets queries the HCA data bases to gather data from the Global
 The table GlobalMembers.dbo.Enrollments is the primary source for member enrollment. This table is used as the foundation of the membership enrollment roster and provides us with unique identifiers and all enrollment segments for an individual.
 
 ```{sql, connection = QRPTP01, output.var = "GM_Enrollments_AllACC"}
-#| label: AHCCCS Enrollments
-#| eval: true
-#| include: false
-#| echo: false
-#| warning: false
-#| error: false
 
-# This is the source of truth for enrollment start and end dates
+-- This is the source of truth for enrollment start and end dates
 
 declare @AzACC int = narbha.dbo.ufn_GetIntLobIdFromLobName('ArizonaAcc', getdate());
 
-declare @AzRbha int = narbha.dbo.ufn_GetIntLobIdFromLobName('AzRBHA', getdate());
+-- declare @AzRbha int = narbha.dbo.ufn_GetIntLobIdFromLobName('AzRBHA', getdate());
 
-declare @AzSO int = narbha.dbo.ufn_GetIntLobIdFromLobName('AZ State Only', getdate());
+-- declare @AzSO int = narbha.dbo.ufn_GetIntLobIdFromLobName('AZ State Only', getdate());
 
-declare @AzHCIC int = narbha.dbo.ufn_GetIntLobIdFromLobName('HCIC', getdate());
+-- declare @AzHCIC int = narbha.dbo.ufn_GetIntLobIdFromLobName('HCIC', getdate());
 
 SELECT * 
 
@@ -103,28 +128,13 @@ ORDER BY PrimaryId , EnrollmentDate DESC
 
 ```
 
-```{r}
-#| label: Write AHCCCS Enrollments
-#| eval: true
-#| include: false
-#| echo: false
-#| warning: false
-#| error: false
-
-## Write to CSV
-# write.csv(Enrollments_AllACC, "./data/input/Enrollments_AllACC.csv")
-
-```
-
 ### All AZ Enrollments Data
 
+The table GlobalMembers.dbo.DailyMemberShipAllArizonaEnrollments provides us with information about the member's assigned health home.
+
 ```{sql, connection = QRPTP01, output.var = "GM_ALLAZ_Enrollments"}
-#| label: GM All AZ Enrollments
-#| eval: true
-#| include: false
-#| echo: false
-#| warning: false
-#| error: false
+
+-- Provides various data including assigned health home
 
 SELECT * 
 
@@ -135,28 +145,13 @@ WHERE void = 0
 ORDER BY PrimaryId
 ```
 
-```{r}
-#| label: Write GM All AZ Enrollments
-#| eval: true
-#| include: false
-#| echo: false
-#| warning: false
-#| error: false
-
-## Write to CSV
-# write.csv(GM_ALLAZ_Enrollments, "./data/input/GM_AllAZ_Enrollments.csv")
-
-```
-
 ### All AZ Addresses Data
 
+The table GlobalMembers.dbo.DailyMemberShipAllArizonaAddresses provides us with residential information including address, effective date of address, and email address.
+
 ```{sql, connection = QRPTP01, output.var = "GM_ALLAZ_Addresses"}
-#| label: GM All AZ Addresses
-#| eval: true
-#| include: false
-#| echo: false
-#| warning: false
-#| error: false
+
+-- Provides address information
 
 SELECT * 
 
@@ -166,37 +161,19 @@ WHERE Void = 0
   
 ```
 
-```{r}
-#| label: Write GM All AZ Addresses
-#| eval: true
-#| include: false
-#| echo: false
-#| warning: false
-#| error: false
-
-## Write to CSV
-# write.csv(GM_ALLAZ_Addresses, "./data/input/GM_AllAZ_Addresses.csv")
-
-```
-
-
 ### Client Demographics
 
+The table GlobalMembers.dbo.Clients provides us with important demographic and REaL (Race, Ethnicity, and Language) data.
+
 ```{sql, connection = QRPTP01, output.var = "GM_Clients_Demographics"}
-#| label: Client Demograhics
-#| eval: true
-#| include: false
-#| echo: false
-#| warning: false
-#| error: false
 
 declare @AzACC int = narbha.dbo.ufn_GetIntLobIdFromLobName('ArizonaAcc', getdate());
 
-declare @AzRbha int = narbha.dbo.ufn_GetIntLobIdFromLobName('AzRBHA', getdate());
+-- declare @AzRbha int = narbha.dbo.ufn_GetIntLobIdFromLobName('AzRBHA', getdate());
 
-declare @AzSO int = narbha.dbo.ufn_GetIntLobIdFromLobName('AZ State Only', getdate());
+-- declare @AzSO int = narbha.dbo.ufn_GetIntLobIdFromLobName('AZ State Only', getdate());
 
-declare @AzHCIC int = narbha.dbo.ufn_GetIntLobIdFromLobName('HCIC', getdate());
+-- declare @AzHCIC int = narbha.dbo.ufn_GetIntLobIdFromLobName('HCIC', getdate());
 
 SELECT * 
 
@@ -209,22 +186,13 @@ ORDER BY LastName DESC
 
 ```
 
-```{r}
-#| label: Write Client Demographics
-#| eval: true
-#| include: false
-#| echo: false
-#| warning: false
-#| error: false
-
-## Write to CSV
-# write.csv(Clients_Demographics_AllACC, "./data/input/Clients.csv")
-
-```
-
 ### Claims for last service
 
+This set of code identifies the last service provided for certain provider types. This data provides additional information for health homes to conduct meaningful outreach.
+
 ```{sql, connection = QRPTP01, output.var = "LastService"}
+
+-- Provides the last known service, and service provider for certain provider types.
 
 WITH RankedClaims AS (
     SELECT
@@ -247,8 +215,12 @@ WHERE rn = 1
 
 ### Enrollment Calculation
 
+The following code goes through a procedure to combine the data from the collection of member information tables into a single enrollment roster.
+
+This table is the record of all living individuals who have an active enrollment with BCBS HCA ACC health plan who are auto-assigned to an Alliance Provider, and who have a residential address in the northern GSA counties. In other words, this is a roster of all active Alliance ACO members.
+
 ```{r}
-#| label: Enrollment
+#| label: Enrollment Calculation
 #| eval: true
 #| include: true
 #| echo: true
@@ -257,13 +229,14 @@ WHERE rn = 1
 
 # Identify Alliance Membership
 
-# Merge Enrollment files from HCA global members database. The source data for this is futher outlined inthe Framework document. 
+# Merge Enrollment files from HCA global members database.
 AllianceEnrolledMembers_Merge <-
-  merge(x = GM_Enrollments_AllACC,
-        y = GM_Clients_Demographics,
+  merge(x = GM_Enrollments_AllACC, # Source of truth for enrollment segments
+        y = GM_Clients_Demographics, # assigned health home information
         by = "PrimaryId",
         all.x = TRUE)
-  
+
+# Select variables for analysis  
 AllianceEnrolledMembers_Merge <-  
   AllianceEnrolledMembers_Merge |> 
   filter(Void.x == FALSE & Void.y == FALSE) |>  # FALSE = The record has not be voided
@@ -285,7 +258,7 @@ AllianceEnrolledMembers_Merge <-
 
 AllianceEnrolledMembers_Merge <-
   merge(x = AllianceEnrolledMembers_Merge,
-        y = GM_ALLAZ_Enrollments, # Adds  and AHCCCSID
+        y = GM_ALLAZ_Enrollments, # Adds AHCCCSID
         by = "PrimaryId",
         all.x = TRUE)
 
@@ -295,14 +268,14 @@ AllianceEnrolledMembers_Merge <-
 
 AllianceEnrolledMembers_Merge <-
   merge(x = AllianceEnrolledMembers_Merge,
-        y = ProviderTIN, # Add provider TIN
+        y = ProviderTIN, # Add provider TIN of health home
         by = "BHHShortName",
         all.x = TRUE)
 
 # remove hyphen in TIN
 AllianceEnrolledMembers_Merge$BHHProvider_TIN <- gsub("-", "", AllianceEnrolledMembers_Merge$BHHProvider_TIN)
 
-
+# Select variables for analysis
 AllianceEnrolledMembers_Merge <-
   AllianceEnrolledMembers_Merge |> 
   select(
@@ -327,6 +300,11 @@ AllianceEnrolledMembers_Merge <-
   )
 
 AllianceEnrolledMembers_Merge <-
+  AllianceEnrolledMembers_Merge |> 
+  rename("EnrollmentDate" = EnrollmentDate.x,
+         "DisenrollmentDate" = DisenrollmentDate.x)
+
+AllianceEnrolledMembers_Merge <-
   merge(x = AllianceEnrolledMembers_Merge,
         y = GM_ALLAZ_Addresses, # adds address info
         by = "PrimaryId",
@@ -334,6 +312,7 @@ AllianceEnrolledMembers_Merge <-
 
 AllianceEnrolledMembers_Merge <- 
   AllianceEnrolledMembers_Merge |> 
+  filter(Void == FALSE) |> # filters out any voided entries
   select(
     PrimaryId,
     AHCCCSID,
@@ -342,8 +321,8 @@ AllianceEnrolledMembers_Merge <-
     BHHShortName,
     BHHLongName,
     BHHProvider_TIN,
-    EnrollmentDate.x,
-    DisenrollmentDate.x,
+    EnrollmentDate,
+    DisenrollmentDate,
     DOB,
     DOD,
     Sex,
@@ -353,7 +332,8 @@ AllianceEnrolledMembers_Merge <-
     SpokenLanguage,
     NativeLanguage,
     ResCountyName, # Senior finance leaders report this field may not be 100% reliable
-    ResCity, # Same
+    ResAddr1, # Senior finance leaders report this field may not be 100% reliable
+    ResCity, # Senior finance leaders report this field may not be 100% reliable
     ResEffDate,
     HomePhone,
     EmergencyPhone,
@@ -361,51 +341,56 @@ AllianceEnrolledMembers_Merge <-
   )
 
 
+# Remove any rogues spaces in any field in the data
+AllianceEnrolledMembers_Merge <- 
+  AllianceEnrolledMembers_Merge |> 
+  mutate_all(str_squish)
 
-# Trim extra spaces at end of rescountyname
-AllianceEnrolledMembers_Merge$ResCountyName <-
-  trimws(AllianceEnrolledMembers_Merge$ResCountyName)
-
-# This is a data set containing enrollment information for all ACC members with either enrolled or disenrolled status
+# The result at this point is a data set containing enrollment information for all ACC members with either enrolled or disenrolled status
 # Next, we make it just Alliance Members
 
 # Filter for The Alliance Providers
-# This is about 382,000 people
+# This is about 383,977 people
 AllianceEnrolledMembers <-
   AllianceEnrolledMembers_Merge |> 
   filter(BHHShortName %in% Provider_ShortName)
 
 # Then filter for the 5 northern counties
-# This is about 311,465 people
+# This is about 312612 people
 AllianceEnrolledMembers <-
   AllianceEnrolledMembers |> 
   filter(ResCountyName %in% NAZ_Counties)
 
-# Filter out dead people (no offense intended)
-# This is about 305,673 people
+# Filter out deceased people (no offense intended)
+# This is about 306,515 people
 AllianceEnrolledMembers <-
   AllianceEnrolledMembers |> 
   filter(is.na(DOD))
 
 # Filter out end dated enrollment segments
+# This leaves us with only active enrollments
 AllianceEnrolledMembers <-
   AllianceEnrolledMembers |> 
-  filter(is.na(DisenrollmentDate.x))
+  filter(is.na(DisenrollmentDate))
 
-# This table is the record of all living individuals who have had an enrollment with BCBS HCA ACC health plan who are auto-assigned to an Alliance Provider, and who have a residential address in the northern GSA counties.
+# This table is the record of all living individuals who have an active enrollment with BCBS HCA ACC health plan who are auto-assigned to an Alliance Provider, and who have a residential address in the northern GSA counties. In other words, this is a roster of all active Alliance ACO members.
 
 # Drop the Enrolled Members Merge file because we don't need non-Alliance Members for this
 # rm(AllianceEnrolledMembers_Merge)
-
-## Write to CSV
-# write.csv(AllianceEnrolledMembers, "./data/output/AllianceEnrolledMembers.csv")
 
 ```
 
 ### Last Service
 
+This step adds an indication of where the member received their last service. It only includes select provider types, which are outlined in the SQL code above.
+
 ```{r}
-# Add last service
+#| label: Last Service
+#| eval: true
+#| include: true
+#| echo: true
+#| warning: false
+#| error: false
 
 LastService <-
   LastService |> 
@@ -415,9 +400,24 @@ LastService <-
 
 AllianceEnrolledMembers <- 
   merge(x = AllianceEnrolledMembers,
-        y = LastService,
+        y = LastService, # add last service information
         by = "PrimaryId",
         all.x = TRUE)
+```
+
+### Finalize Enrollment Roster
+
+```{r}
+#| label: Finalize Enrollment Roster
+#| eval: true
+#| include: true
+#| echo: true
+#| warning: false
+#| error: false
+
+
+# Write to CSV
+ write.csv(AllianceEnrolledMembers, "./data/input/AllianceEnrolledMembers.csv")
 
 ```
 
@@ -427,18 +427,44 @@ These next few codes sets query the HCA databases for claims data for all types 
 
 ### All claims from VOS table
 
+The table Claims.dbo.shcaVos is the source of truth for claims. This first query will gather all of the claims for all HCA members within the given time frame.
+
 ```{sql, connection = QRPTP01, output.var = "Claims_AllHCA"}
-#| label: BH Claims
-#| eval: true
-#| include: false
-#| echo: false
-#| warning: false
-#| error: false
+
+-- Provides all claims for the indicated time frame
 
 Declare @start as date = '10-01-2022'
-Declare @end as date = '12-31-2022'
+Declare @end as date = '10-30-2022'
 
-SELECT *
+SELECT 
+    Icnno,
+    PrimaryID,
+    AHCCCSID,
+    Age,
+    Age_Group,
+    Population,
+    RA,
+    Svccode,
+    BegDate,
+    PrimaryDiagnosis,
+    ProviderName,
+    Fedtaxid,
+    RenderingProviderNpi,
+    PayContract,
+    Placesvc,
+    ProviderType,
+    Dx1, Dx2, DX3, Dx4, Dx5, DX6,
+    Dx7, Dx8, DX9, Dx10, Dx11, DX12,
+    Calcnetpd,
+    MemberACCGSA,
+    MemberServiceArea,
+    MemberZipcode,
+    RenderingProviderServiceArea,
+    MedicationName,
+    MedicationGPI,
+    MedicationNDC,
+    EncounterStatus,
+    EncounterStatusDate
 
 FROM Claims.dbo.shcaVos
 
@@ -447,24 +473,497 @@ WHERE BegDate BETWEEN @start AND @end
 ```
 
 ```{r}
-#| label: Write Claims All HCA
+#| label: Claims Write
+#| eval: true
+#| include: true
+#| echo: true
+#| warning: false
+#| error: false
+
+write.csv(Claims_AllHCA, "./data/input/Claims_AllHCA.csv")
+
+```
+
+### PBM Claims
+
+The table PBM.dbo.HCICPharmacyClaimSummary provides more granular details on medications and the prescription process.
+
+```{sql, connection = QRPTP01, output.var = "ClaimsPBM_AllHCA"}
+
+-- This provides pharmacy claim data from the pharmacy benefit manager
+
+Declare @start as date = '10-01-2022'
+Declare @end as date = '09-30-2023'
+
+SELECT
+  MemberAhcccsId AS 'AHCCCSID',
+  PrimaryId,
+  writtendte,
+  preslstnme,
+  presfstnme,
+  presspccde,
+  prescriber,
+  npiprescr,
+  prescdeaid,
+  dtfilled,
+  LabelName,
+  genericnme,
+  metricstrg,
+  drgstrguom,
+  adminroute,
+  dosageform,
+  decimalqty,
+  dayssupply,
+  refill,
+  GpiNumber,
+  GPIClassification,
+  Gender,
+  birthdte,
+  er02key,
+  pbmrxclaimnbr,
+  rxclaimnbr,
+  pharmzip,
+  freetext1,
+  AmtPaidFinal
+
+FROM
+PBM.dbo.HCICPharmacyClaimSummary
+
+WHERE
+accountid = 'COMPLETE' AND
+LOB = 'ArizonaACC' AND
+Void = 0 AND
+dtfilled BETWEEN @start AND @end
+
+```
+
+```{r}
+#| label: PBM Claims Write
+#| eval: true
+#| include: true
+#| echo: true
+#| warning: false
+#| error: false
+
+write.csv(ClaimsPBM_AllHCA, "./data/input/ClaimsPBM_AllHCA.csv")
+
+```
+
+### AMM Claims
+
+This intermediary step creates a subset of the claims data that includes on claims for AMM medications.
+
+```{r}
+#| label: AMM Claims
+#| eval: true
+#| include: true
+#| echo: true
+#| warning: false
+#| error: false
+
+# Filter the MyHEDIS2023_MedicationDirectory for "Antidepressant Medications"
+AntidepressantMedications <- MyHEDIS2023_MedicationDirectory |>
+  mutate_all(~str_trim(., side = "right")) |> # trim off extra spaces
+  filter(`Medication List Name` == "Antidepressant Medications")
+
+# Extract the associated code values as a vector
+AntidepressantMedicationList <- AntidepressantMedications$Code
+
+# Using Claims_AllHCA...
+
+# Filter all claims for only AMM Medication services
+ClaimsAMM_AllHCA <-
+  Claims_AllHCA |> # Claims_AllHCA is all claims from 01-16-22 (105 days prior to Intake Period) through 04-30-23
+  mutate_all(~str_trim(., side = "right")) |> # trim spaces for whole data frame
+  filter(MedicationNDC %in% AntidepressantMedicationList) # filter for eligible NDC
+
+# Write to CSV
+write.csv(ClaimsAMM_AllHCA, "./data/input/ClaimsAMM_AllHCA.csv")
+
+```
+
+
+## VBP Quality Roster
+
+This is an aggregation of all of the VBP Quality Roster data for all of the providers.
+
+### Import Measurement Year 2022
+
+#### Procedure
+
+```{r}
+#| label: VBP Phase 1
+#| eval: true
+#| include: true
+#| echo: true
+#| warning: false
+#| error: false
+
+# Create Function to read Excel files from a folder and its subfolders
+read_excel_sheets_as_separate_df <- function(path) {
+  # Get list of files in the current directory
+  files <- list.files(path = path, full.names = TRUE, recursive = TRUE)
+  
+  # Initialize an empty list to store data frames
+  all_dfs <- list()
+  
+  # Loop through each Excel file
+  for (file in files) {
+    if (grepl("\\.xlsx$|\\.xls$", file, ignore.case = TRUE)) {
+      file_name <- basename(file)
+      sheet_names <- excel_sheets(file)
+      
+      # Read each sheet and store as a separate data frame
+      for (sheet in sheet_names) {
+        df_name <- paste0(file_name, "_", sheet)
+        data <- readxl::read_excel(file, sheet = sheet)
+        assign(df_name, data)
+        all_dfs[[df_name]] <- get(df_name)
+      }
+    }
+  }
+  
+  return(all_dfs)
+}
+
+# Set the folder path
+folder_path <- "./data/VBPReports/Master"
+
+# Call the function to read Excel files and sheets as separate data frames
+result_separate_df <- read_excel_sheets_as_separate_df(folder_path)
+
+# This result is a list of tibbles that are each individual sheet from the workbook, stored individually from one another. 
+
+# Filter list items that end in "_Detail". This isolates the "Detail" sheet which contains data on each case, including its compliance status.
+filtered_list <- result_separate_df[sapply(names(result_separate_df), function(x) grepl("_Detail$", x))]
+
+# Bind tibbles/data frames into one single data frame that contains all of the data from each of the Detail sheets
+combined_df <- bind_rows(filtered_list)
+
+# Clean and polish data
+
+# The next few steps process each sheet to remove superfluous rows that provide narrative text when viewed in excel, but are not needed for pure data.
+
+# Filter out rows with NA in the second column.
+filtered_combined_df <- 
+  combined_df |> 
+  filter(!is.na(`...2`))
+
+# Extract values from the first row of filtered_combined_df to be used as the column headers
+first_row_values <- unlist(filtered_combined_df[1,])
+
+# Store the values in a list called DetailSheetNames
+DetailSheetNames <- as.list(first_row_values)
+
+# Convert DetailSheetNames to character vector
+DetailSheetNames <- as.character(DetailSheetNames)
+
+# Remove rows where the value in the first column is "LOB". This removes the column headers that was imported from the excel. Several of these column names come in as uninformative data, like "...2".
+filtered_combined_df <- 
+  filtered_combined_df |> 
+  filter(`Health Choice Arizona (HCA) – Arizona Medicaid` != "LOB")
+
+# Rename columns using values from DetailSheetNames
+names(filtered_combined_df) <- DetailSheetNames
+
+# Merge filtered_combined_df with ProviderShortnames based on TIN column
+merged_df <- 
+  merge(x = filtered_combined_df, 
+        y = ProviderTIN, 
+        by.x = "Health Home TIN", 
+        by.y = "BHHProvider_TIN", 
+        all.x = TRUE)
+
+# Convert excel dates to a yyyy-mm-dd format
+merged_df$`Report Period` <- as.Date(as.numeric(merged_df$`Report Period`), origin = "1899-12-30")
+merged_df$`Data Period` <- as.Date(as.numeric(merged_df$`Data Period`), origin = "1899-12-30")
+merged_df$`Measurement End Date` <- as.Date(as.numeric(merged_df$`Measurement End Date`), origin = "1899-12-30")
+merged_df$CapPeriodDateFormat <- as.Date(as.numeric(merged_df$CapPeriodDateFormat), origin = "1899-12-30")
+
+merged_df <- merged_df |>
+  mutate(
+    Numerator = case_when(
+      (`Measure ID` %in% c("AMM", "FUH", "FUM") & Numerator == 0) ~ "OPEN",
+      `Measure ID` == "HDO" & Numerator != 0 ~ "CLOSED",
+      TRUE ~ "NA"
+    )
+  )
+
+# Rename columns with 2023 column names. The names of the variables changed from 2022-2023. This process sets the column names to match the newer 2023 format. 
+merged_df <-
+  merged_df |> 
+  rename(`Gap Status` = Numerator)
+
+# Split Member Name into LastName and FirstName
+merged_df <- merged_df |>
+  separate(`Member Name`, into = c("LastName", "FirstName"), sep = ",")
+
+# Select variables for analysis
+Data_VBPQR_2023_Detail <-
+  merged_df |> 
+  select(
+    `Data Period`,
+    `Health Home TIN`,
+    BHHShortName,
+    `Health Home Name`,
+    `Member ID`,
+    LastName,
+    FirstName,
+    `Measure ID`,
+    `SubMeasure Description`,
+    `Gap Status`)
+
+# Assuming df is your data frame and VBPTrendReport_colnames is your list of column names
+colnames(Data_VBPQR_2023_Detail) <- VBPTrendReport_colnames
+
+```
+
+### Import Measurement Year 2023 and on
+
+#### Procedure
+
+The format and structure of the VBP Quality Roster was changed at the beginning of the 2023 Measurement Year. In particular, the variable "Numerator" with binary values (0 and 1) representing compliance was changed to "Gap Status" with values of "OPEN" or "CLOSED". Thus, we have a separate procedure for importing data for the measurement year 2023, and presumable on into the future. Also, in the 2023 format, the "Controls", including report dates, are stored on a separate sheet from the "Roster" which has the case details and compliance status. These 2 sheets must be individually imported, processed, and bound before further analysis is possible.
+
+```{r}
+#| label: VBP Phase 2
 #| eval: true
 #| include: false
 #| echo: false
 #| warning: false
 #| error: false
 
-## Write to CSV
-# write.csv(Claims_AllHCA, "./data/output/Claims_AllHCA.csv")
+# Set the folder path
+folder_path <- "./data/VBPReports/Master"
+
+# Find files containing "Roster" in their filenames
+roster_files <- list.files(path = folder_path, pattern = "Roster", full.names = TRUE)
+
+# Function to read "Roster" and "Controls" sheets from a file and bind them
+bind_roster_controls <- function(file) {
+  # Read sheets "Roster" and "Controls"
+  roster_sheet <- tryCatch(readxl::read_excel(file, sheet = "Roster"), error = function(e) NULL)
+  controls_sheet <- tryCatch(readxl::read_excel(file, sheet = "Controls"), error = function(e) NULL)
+  
+  # Rename "Health Home TIN & Name" column to "Assigned Health Home TIN & Name" in Controls sheet
+  col_index <- which(names(controls_sheet) == "Health Home TIN & Name")
+  if (length(col_index) > 0) {
+    names(controls_sheet)[col_index] <- "Assigned Health Home TIN & Name"
+  }
+  
+  # Check if both sheets are not NULL and have data
+  if (!is.null(roster_sheet) && !is.null(controls_sheet) && !all(is.na(roster_sheet)) && !all(is.na(controls_sheet))) {
+    # Add "Report TIN" column to Roster sheet
+    roster_sheet$`Report TIN` <- substr(basename(file), 1, 10)
+    
+    # Bind sheets and fill missing spaces with NA
+    max_rows <- max(nrow(roster_sheet), nrow(controls_sheet))
+    roster_filled <- bind_rows(roster_sheet, data.frame(matrix(NA, nrow = max_rows - nrow(roster_sheet), ncol = ncol(roster_sheet))))
+    controls_filled <- bind_rows(controls_sheet, data.frame(matrix(NA, nrow = max_rows - nrow(controls_sheet), ncol = ncol(controls_sheet))))
+    
+    # Combine "Roster" and "Controls" sheets
+    combined_data <- cbind(roster_filled, controls_filled)
+    
+    return(combined_data)
+  } else {
+    message("One or both sheets ('Roster' and/or 'Controls') not found or contain no data in file:", file)
+    return(NULL)
+  }
+}
+
+# Create an empty list to store combined data from all files
+combined_data_list <- list()
+
+# Iterate through each file in roster_files and store it in "Combined_data_list"
+for (file in roster_files) {
+  combined_data <- bind_roster_controls(file)
+  
+  # Add combined data to the list
+  if (!is.null(combined_data)) {
+    combined_data_list[[file]] <- combined_data
+  }
+}
+
+# Iterate through combined_data_list and update columns 19-24 to maintain consistent variable names and populate the Report Date for all cases.
+for (file in names(combined_data_list)) {
+  df <- combined_data_list[[file]]
+  
+  # Check if columns 19-24 have a non-NA first value and fill the entire column
+  for (col in 19:24) {
+    if (!is.na(df[1, col])) {
+      df[, col] <- df[1, col]
+    }
+  }
+  
+  # Update the list with modified dataframe
+  combined_data_list[[file]] <- df
+}
+
+# Combining all rows from all tibbles in combined_data_list
+all_combined_data <- bind_rows(combined_data_list)
+
+# the result of this is a data frame that is the Roster sheet, combined with the Control sheet, for each individual work book, bound together for all of the months for all of the providers.
+
+# Clean and polish the data
+
+# Remove rows with NA in column "...2"
+filtered_all_combined_data <-
+  all_combined_data |> 
+  filter(!is.na(...2))
+
+# Extracting column names from the first row for columns 1-18
+col_names <- as.character(filtered_all_combined_data[1, 1:9])  # Extract column names from the first row for columns 1-18
+
+# Assigning the first row as column headers for columns 1-18 and removing the first row from these columns
+names(filtered_all_combined_data)[1:9] <- col_names  # Assign column names for columns 1-9
+# Remove rows where the column "Measure" has the value "Measure". This removes the original column names.
+filtered_all_combined_data <- filtered_all_combined_data[filtered_all_combined_data$Measure != "Measure", ]
+
+# Select Variables for analysis
+filtered_all_combined_data <-
+  filtered_all_combined_data |> 
+  select(
+    Measure,
+    `Gap Status`,
+    `Member ID`,
+    `Member Age`,
+    `Member Name`,
+    `Health Home TIN & Name`,
+    `Assigned Health Home TIN & Name`,
+    `Report TIN`,
+    MeasurementYearEndDate,
+    ClaimsAdjudicatedDate,
+    CapMonth,
+    LastRefresh
+  )
+
+# split member name into first name/lastname
+filtered_all_combined_data <- filtered_all_combined_data |>
+  separate(`Member Name`, into = c("LastName", "FirstName"), sep = ",", remove = FALSE)  # Splitting "Member Name" column into LastName and FirstName
+
+# Split Health Home TIN into separate columns for each
+filtered_all_combined_data <- filtered_all_combined_data |>
+  separate(`Health Home TIN & Name`, into = c("Health Home TIN", "HealthHomeName"), sep = " ", extra = "merge")  # Splitting column into Health Home TIN and HealthHomeName
+
+# Trim the health home name for extra spaces and characters
+filtered_all_combined_data$HealthHomeName <- substr(filtered_all_combined_data$HealthHomeName, start = 3, stop = nchar(filtered_all_combined_data$HealthHomeName))
+
+# Merge filtered_combined_df with ProviderShortnames based on TIN column
+filtered_all_combined_data <- 
+  merge(x = filtered_all_combined_data, 
+        y = ProviderTIN, 
+        by.x = "Report TIN", 
+        by.y = "BHHProvider_TIN", 
+        all.x = TRUE)
+
+# Extract the first three digits from "Measure" column into a new column "Measure ID"
+filtered_all_combined_data$`Measure ID` <- substr(as.character(filtered_all_combined_data$Measure), 1, 3)
+
+# Remove the first 4 digits from the 'Measure' column
+filtered_all_combined_data$Measure <- substr(filtered_all_combined_data$Measure, start = 7, stop = nchar(filtered_all_combined_data$Measure))
+
+# Select Variables for analysis
+Data_VBPQR_2023_Roster <-
+  filtered_all_combined_data |> 
+  select(
+    ClaimsAdjudicatedDate,
+    `Report TIN`,
+    BHHShortName,
+    HealthHomeName,
+    `Member ID`,
+    LastName,
+    FirstName,
+    `Measure ID`,
+    Measure,
+    `Gap Status`
+  )
+
+# Assuming df is your data frame and VBPTrendReport_colnames is your list of column names
+colnames(Data_VBPQR_2023_Roster) <- VBPTrendReport_colnames
+
+
 ```
 
-## VBP Quality Roster
+### Finalize data set
 
-This is an aggregation of all of the VBP Quality Roster data for all of the providers.
+The 2022 and 2023 data sets are now aggregated, cleaned, and formatted so that they can be combined with one another. This step binds the 2 data frames into one. This step also offers the opportunity to clean up the environment from transitional data that is no longer needed.
 
 ```{r}
+#| label: VBP Phase 3
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
 
-# This is a simple import from the ValueBasedData model. The code can be replicated here when we have time to polish. For now, this is the most recent data for VBP available.
-VBPQR_AllRecords <- read.csv("./data/input/Data_VBPQR_AllRecords.csv")
+# Bind the 2022 data to the 2023 and on data
+Data_VBPQR_AllRecords <-
+  rbind(Data_VBPQR_2023_Detail,
+        Data_VBPQR_2023_Roster)
+
+# Filter the data for only contract required and prospective measures.
+Data_VBPQR_AllRecords <-
+  Data_VBPQR_AllRecords |> 
+  filter(MeasureID %in% ContractMeasures)
+
+Data_VBPQR_AllRecords$MemberID <- 
+  gsub("HCI", "",
+       Data_VBPQR_AllRecords$MemberID)
+
+# Write to CSV
+write.csv(Data_VBPQR_AllRecords, "./data/input/Data_VBPQR_AllRecords.csv")
 ```
+
+```{R}
+#| label: VBP Clean Up
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+# Clean up the environment from all of the transitional data frames
+
+# List all objects in the environment
+objects_to_keep <- c("Data_VBPQR_AllRecords",
+                     "Claims_AllHCA",
+                     "ClaimsPBM_AllHCA",
+                     "ClaimsAMM_AllHCA",
+                     "AllianceEnrolledMembers",
+                     "MyHEDIS2023_AllValueSetsToCodes",
+                     "MyHEDIS2023_MedicationDirectory",
+                     "ProviderTIN",
+                     "QRPTP01",
+                     "Z_Codes",
+                     "AntidepressantMedicationList",
+                     "NAZ_Counties",
+                     "Provider_ShirtName",
+                     "ContractMeasures")  # Add more objects to keep as needed
+
+# Get a list of objects in the environment
+all_objects <- ls()
+
+# Remove objects except for those specified in objects_to_keep
+objects_to_remove <- all_objects[!all_objects %in% objects_to_keep]
+rm(list = objects_to_remove)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
