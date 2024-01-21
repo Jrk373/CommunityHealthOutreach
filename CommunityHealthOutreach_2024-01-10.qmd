@@ -44,12 +44,41 @@ library(stringr)
 options(width = 999)
 ```
 
+## Pre-load data for testing
+
+```{r}
+#| label: Pre-Load Data
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+AllianceEnrolledMembers <- read.csv("./data/input/AllianceEnrolledMembers.csv")
+
+Claims_AllHCA <- read.csv("./data/input/Claims_AllHCA.csv")
+
+ClaimsAMM_AllHCA <- read.csv("./data/input/ClaimsAMM_AllHCA.csv")
+
+ClaimsPBM_AllHCA <- read.csv("./data/input/Claims_AllHCA.csv")
+
+Data_VBPQR_AllRecords <- read.csv("./data/input/Data_VBPQR_AllRecords.csv")
+
+```
+
 ## Common Objects
 
 ```{r}
+#| label: Create Common Objects
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
 # Create table for inline code
-InLineCode <- data.frame(
-  Column1 = "text")
+# InLineCode <- data.frame(
+#   Column1 = "text")
 
 # Vector of Alliance Provider Name
 Provider_ShortName <- (c("CBI", "CPIH", "EHS", "LCBHC", "MMHC", "SHG", "SBH", "TGC", "WYGC"))
@@ -57,16 +86,55 @@ Provider_ShortName <- (c("CBI", "CPIH", "EHS", "LCBHC", "MMHC", "SHG", "SBH", "T
 # Vector of NAZ Counties
 NAZ_Counties <- (c("Apache", "Coconino", "Mohave", "Navajo", "Yavapai"))
 
+# Create provider shortnames based on TIN
+# Create a data frame called ProviderShortnames
+ProviderTIN <- 
+  data.frame(
+  BHHProvider_TIN = c("86-0206928", "86-0207499", "86-0214457", "86-0215065", "86-0223720", "86-0250938", "86-0290033", "86-0473221", "94-2880847"),
+  BHHShortName = c("PH", "SHG", "MMHC", "CPIH", "TGC", "LCBHC", "SBH", "EHS", "CBI")
+  )
+
+# Create a list with the ultimate column names for the data
+VBPTrendReport_colnames <- 
+  c("ClaimsAdjudicatedThrough",
+    "AllianceProviderTIN",
+    "ProviderShortname",
+    "HealthHomeName",
+    "MemberID",
+    "LastName",
+    "FirstName",
+    "MeasureID",
+    "Measure",
+    "GapStatus")
+
+# COntract Measures List
+ContractMeasures <- c("AMM", "FUH", "FUM", "HDO", "FUA")
+
+# HEDIS Value Sets
+MyHEDIS2023_AllValueSetsToCodes <- read_xlsx("./documents/M. HEDIS MY 2023 Volume 2 Value Set Directory 2023-03-31 - Copy.xlsx", sheet = "Value Sets to Codes")
+
+MyHEDIS2023_MedicationDirectory <- read_xlsx("./documents/HEDIS MY 2023 Medication List Directory 2023-03-31.xlsx", sheet = "Medication Lists to Codes")
+
+# Z Codes
+Z_Codes <- read_xlsx("./documents/Z-Codes.xlsx", sheet = "Sheet1")
+
 ```
 
 ## Procedure
 
-### Create an indicator for if on VBPQR
+### Create an indicator for if member is on VBPQR and add it to the Enrollment Roster
 
 ```{r}
+#| label: Create VBPQR Indicator
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
 
+# Select variables for analysis
 VBPQR_filtered <-
-  VBPQR_AllRecords |> 
+  Data_VBPQR_AllRecords |> 
   select(
     ClaimsAdjudicatedThrough,
     AllianceProviderTIN,
@@ -78,21 +146,26 @@ VBPQR_filtered <-
   rename("AHCCCSID" = MemberID) |> 
   filter(MeasureID != "HDO")
 
+# Format as date
+VBPQR_filtered$ClaimsAdjudicatedThrough <- as.Date(VBPQR_filtered$ClaimsAdjudicatedThrough)
+
 # Step 1: Filter for only the most recent ClaimsAdjudicatedThrough date
 VBPQR_filtered <- VBPQR_filtered |>
   group_by(AHCCCSID) |>
   filter(ClaimsAdjudicatedThrough == max(ClaimsAdjudicatedThrough))
 
-# Step 2: Create new columns "AMM", "FUH", and "FUM"
+# Step 2: Create new columns "AMM", "FUH", and "FUM". This is where the VBPQR indiciator will go.
 VBPQR_filtered <- VBPQR_filtered |>
   mutate(AMM = NA, FUH = NA, FUM = NA)
 
-# Step 3: Update new columns based on MeasureID
+# Step 3: Update new columns based on MeasureID. 
 VBPQR_filtered$AMM[VBPQR_filtered$MeasureID == "AMM"] <- VBPQR_filtered$GapStatus[VBPQR_filtered$MeasureID == "AMM"]
+
 VBPQR_filtered$FUH[VBPQR_filtered$MeasureID == "FUH"] <- VBPQR_filtered$GapStatus[VBPQR_filtered$MeasureID == "FUH"]
+
 VBPQR_filtered$FUM[VBPQR_filtered$MeasureID == "FUM"] <- VBPQR_filtered$GapStatus[VBPQR_filtered$MeasureID == "FUM"]
 
-# Collapse data to one row per AHCCCSID
+# Collapse data to one row per AHCCCSID with an indicator for each measure.
 collapsed_data <- VBPQR_filtered |>
   group_by(AHCCCSID) |>
   summarize(
@@ -101,8 +174,8 @@ collapsed_data <- VBPQR_filtered |>
     FUM = max(FUM, na.rm = TRUE)
   )
 
-# Attach VBP data to enrollment data
-Analysis <-
+# Attach the VBPQR indicators to the enrollment roster by AHCCCSID 
+CHO_Roster1 <-
   merge(x = AllianceEnrolledMembers,
         y = collapsed_data,
         by = "AHCCCSID",
@@ -110,8 +183,16 @@ Analysis <-
 
 ```
 
+## Select Claims
 
 ```{r}
+#| label: Select Claims
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
 # Select variables to analyze from the claims data
 Claims_filtered <-
   Claims_AllHCA |> 
@@ -151,45 +232,35 @@ Claims_AllAlliance <-
   Claims_filtered |> 
   filter(AHCCCSID %in% AllianceEnrolledMembers$AHCCCSID)
 
-# merge the claims data with the enrollment data
-Analysis <-
+# Filter for only adjudicated paid claims
+Claims_AllAlliance <-
+  Claims_AllAlliance |> 
+    filter(EncounterStatus == "AP")
+
+# Remove any rogues spaces in any field in the data
+Claims_AllAlliance <-
+  Claims_AllAlliance |> 
+  mutate_all(str_squish)
+
+# merge the claims data with the CHO tool
+CHO_Roster2 <-
   merge(x = Claims_AllAlliance,
-        y = Analysis,
+        y = CHO_Roster1,
         by = "AHCCCSID",
         all = TRUE)
 
-# Filter for only adjudicated paid claims
-Analysis <- 
-  Analysis |> 
-  filter(EncounterStatus == "AP")
-
 # Remove some extra variables that we don't need right now
-Analysis <- 
-  Analysis [, -c(6, 14, 30, 31, 33, 35, 36, 37, 38, 40, 44, 49, 51)]
-
-# Remove any rogues spaces in any field in the data
-Analysis <- Analysis |> 
-  mutate_all(str_squish)
+CHO_Roster2 <-
+  CHO_Roster2 [, -c(6, 14, 17:28, 30:33, 37:40, 49)]
 
 # Indicaters for services by the HH or not by the HH
-Analysis <-
-  Analysis |> 
-  mutate(SvcByAssignedBHHTIN = if_else(BHHProvider_TIN == Fedtaxid, 1, 0)) |> 
-  mutate(SvcByOtherTIN = if_else(BHHProvider_TIN != Fedtaxid, 1, 0))
+CHO_Roster2 <-
+  CHO_Roster2 |> 
+  mutate(SvcByAssignedBHHTIN = if_else(Fedtaxid == BHHProvider_TIN, 1, 0)) |> 
+  mutate(SvcByOtherTIN = if_else(Fedtaxid != BHHProvider_TIN, 1, 0))
 
-write.csv(Analysis, "./data/output/CHO_AllianceEnrolledMembers.csv")
-
-# check <-
-#   Analysis |>
-#   select(
-#     AHCCCSID,
-#     BHHProvider_TIN,
-#     RA,
-#     Fedtaxid,
-#     ProviderName,
-#     SvcByAssignedBHHTIN,
-#     SvcByOtherTIN
-#   )
+# Write to CSV
+write.csv(CHO_Roster2, "./data/output/CHO_Roster2.csv")
 
 ```
 
