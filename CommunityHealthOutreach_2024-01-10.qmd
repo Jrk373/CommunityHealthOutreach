@@ -46,6 +46,8 @@ options(width = 999)
 
 ## Pre-load data for testing
 
+These are datasets that are created in the Framework. They are written to CSV in the Framework, and can be imported directly here if they are not already present in the environment. 
+
 ```{r}
 #| label: Pre-Load Data
 #| eval: true
@@ -90,8 +92,8 @@ NAZ_Counties <- (c("Apache", "Coconino", "Mohave", "Navajo", "Yavapai"))
 # Create a data frame called ProviderShortnames
 ProviderTIN <- 
   data.frame(
-  BHHProvider_TIN = c("86-0206928", "86-0207499", "86-0214457", "86-0215065", "86-0223720", "86-0250938", "86-0290033", "86-0473221", "94-2880847"),
-  BHHShortName = c("PH", "SHG", "MMHC", "CPIH", "TGC", "LCBHC", "SBH", "EHS", "CBI")
+  BHHProvider_TIN = c("86-0206928", "86-0206928", "86-0207499", "86-0214457", "86-0215065", "86-0223720", "86-0250938", "86-0290033", "86-0473221", "94-2880847"),
+  BHHShortName = c("PH", "WYGC", "SHG", "MMHC", "CPIH", "TGC", "LCBHC", "SBH", "EHS", "CBI")
   )
 
 # Create a list with the ultimate column names for the data
@@ -122,7 +124,9 @@ Z_Codes <- read_xlsx("./documents/Z-Codes.xlsx", sheet = "Sheet1")
 
 ## Procedure
 
-### Create an indicator for if member is on VBPQR and add it to the Enrollment Roster
+### VBP Quality Roster Indicator 
+
+Create an indicator for if member is on VBPQR and add it to the Enrollment Roster
 
 ```{r}
 #| label: Create VBPQR Indicator
@@ -183,7 +187,11 @@ CHO_Roster1 <-
 
 ```
 
-## Select Claims
+## Claims
+
+### Alliance Only
+
+Filter the total claims table for only those people on the Alliance Enrolled Members roster. 
 
 ```{r}
 #| label: Select Claims
@@ -232,10 +240,10 @@ Claims_AllAlliance <-
   Claims_filtered |> 
   filter(AHCCCSID %in% AllianceEnrolledMembers$AHCCCSID)
 
-# Filter for only adjudicated paid claims
-Claims_AllAlliance <-
-  Claims_AllAlliance |> 
-    filter(EncounterStatus == "AP")
+# # Filter for only adjudicated paid claims
+# Claims_AllAlliance <-
+#   Claims_AllAlliance |> 
+#     filter(EncounterStatus == "AP")
 
 # Remove any rogues spaces in any field in the data
 Claims_AllAlliance <-
@@ -251,11 +259,22 @@ CHO_Roster2 <-
 
 # Remove some extra variables that we don't need right now
 CHO_Roster2 <-
-<<<<<<< HEAD
   CHO_Roster2 [, -c(6, 14, 30:33, 37:40, 49)]
-=======
-  CHO_Roster2 [, -c(6, 14, 17:28, 30:33, 37:40, 49)]
->>>>>>> 3fcb47a50bf53e45925f79f9200a59ff3c9f0780
+```
+
+### Health Home Service Provision
+
+*This still needs some work*
+
+The point here is that a person received the service from thier HH, or from someone else.
+```{r}
+#| label: Same prvider indicator
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
 
 # Indicaters for services by the HH or not by the HH
 CHO_Roster2 <-
@@ -264,14 +283,26 @@ CHO_Roster2 <-
   mutate(SvcByOtherTIN = if_else(Fedtaxid != BHHProvider_TIN, 1, 0))
 
 # Write to CSV
-<<<<<<< HEAD
 # write.csv(CHO_Roster2, "./data/output/CHO_Roster2.csv")
+
+# Check it out cuz Ice is Ryhmin'
+Checkit <-
+  CHO_Roster2 |> 
+  select(c(1, 11, 10, 33, 35, 57, 58)
+    
+  )
 
 ```
 
 # Add Z-Code Indicators
 
 ```{r}
+#| label: Z Code indicators
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
 
 # Assuming CHO_Roster2 is your data frame
 # Create new columns Z55, Z56, Z57, Z59, Z60, Z62, Z63, Z64, Z65, Z75
@@ -316,8 +347,13 @@ for (col in names(CHO_Roster2)) {
 
 
 ```{r}
+#| label: Z-code collapse to single line
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
 
-# Assuming CHO_Roster2 is your data frame
 
 # Select variables
 selected_vars <- c("AHCCCSID", "Zcd_Z55", "Zcd_Z56", "Zcd_Z57", "Zcd_Z59", "Zcd_Z60", "Zcd_Z62", "Zcd_Z63", "Zcd_Z64", "Zcd_Z65", "Zcd_Z75")
@@ -328,6 +364,7 @@ collapsed_data <- CHO_Roster2 %>%
   group_by(AHCCCSID) %>%
   summarise_all(list(~ max(.)))
 
+# drop repeated columns
 CHO_Roster2 <-
   CHO_Roster2 [, -c(59:68)]
 
@@ -345,9 +382,6 @@ Checkit <-
 
 # Write to csv
 write.csv(CHO_Roster3, "./data/output/CHO_Roster3.csv")
-=======
-write.csv(CHO_Roster2, "./data/output/CHO_Roster2.csv")
->>>>>>> 3fcb47a50bf53e45925f79f9200a59ff3c9f0780
 
 ```
 
