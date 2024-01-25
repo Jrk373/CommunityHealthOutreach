@@ -66,6 +66,8 @@ ClaimsPBM_AllHCA <- read.csv("./data/input/Claims_AllHCA.csv")
 
 Data_VBPQR_AllRecords <- read.csv("./data/input/Data_VBPQR_AllRecords.csv")
 
+HHPrescriberNPI <- read.csv("./documents/HHPrescriberNPI.csv")
+
 ```
 
 ## Common Objects
@@ -136,7 +138,7 @@ Create an indicator for if member is on VBPQR and add it to the Enrollment Roste
 #| warning: false
 #| error: false
 
-# Select variables for analysis
+# Select variables for analysis from VBPQR
 VBPQR_filtered <-
   Data_VBPQR_AllRecords |> 
   select(
@@ -185,6 +187,11 @@ CHO_Roster1 <-
         by = "AHCCCSID",
         all.x = TRUE)
 
+# Select variables for analysis
+CHO_Roster1 <-
+  CHO_Roster1 |> 
+  select(1, 3, 4, 5, 6, 8, 9, 10, 11, 13:19, 26:30)
+
 ```
 
 ## Claims
@@ -202,15 +209,16 @@ Filter the total claims table for only those people on the Alliance Enrolled Mem
 #| error: false
 
 # Select variables to analyze from the claims data
-Claims_filtered <-
+Claims_AllAlliance <-
   Claims_AllHCA |> 
+  filter(AHCCCSID %in% AllianceEnrolledMembers$AHCCCSID) |> # Filter for Alliance Members Only
   select(
     Icnno,
     PrimaryID,
     AHCCCSID,
     Age,
-    Age_Group,
-    Population,
+    #Age_Group,
+    #Population,
     RA,
     Svccode,
     BegDate,
@@ -218,27 +226,22 @@ Claims_filtered <-
     ProviderName,
     Fedtaxid,
     RenderingProviderNpi,
-    PayContract,
+    #PayContract,
     Placesvc,
     ProviderType,
     Dx1, Dx2, DX3, Dx4, Dx5, DX6,
     Dx7, Dx8, DX9, Dx10, Dx11, DX12,
-    Calcnetpd,
-    MemberACCGSA,
-    MemberServiceArea,
-    MemberZipcode,
-    RenderingProviderServiceArea,
+    #Calcnetpd,
+    #MemberACCGSA,
+    #MemberServiceArea,
+    #MemberZipcode,
+    #RenderingProviderServiceArea,
     MedicationName,
     MedicationGPI,
     MedicationNDC,
-    EncounterStatus,
-    EncounterStatusDate
+    #EncounterStatus,
+    #EncounterStatusDate
   )
-
-# Filter for Alliance Members Only
-Claims_AllAlliance <-
-  Claims_filtered |> 
-  filter(AHCCCSID %in% AllianceEnrolledMembers$AHCCCSID)
 
 # # Filter for only adjudicated paid claims
 # Claims_AllAlliance <-
@@ -258,15 +261,13 @@ CHO_Roster2 <-
         all = TRUE)
 
 # Remove some extra variables that we don't need right now
-CHO_Roster2 <-
-  CHO_Roster2 [, -c(6, 14, 30:33, 37:40, 49)]
+# CHO_Roster2 <-
+#   CHO_Roster2 [, -c(6, 14, 30:33, 37:40, 49)]
 ```
 
 ### Health Home Service Provision
 
-*This still needs some work*
-
-The point here is that a person received the service from thier HH, or from someone else.
+This code provides an indicator for if the person has received services at either: Yes, at HH at least once in the last 6 months; No, never at their HH in the last 6 months: and Yes, the person has received services at both HH and non-HH.
 ```{r}
 #| label: Same prvider indicator
 #| eval: true
@@ -275,26 +276,47 @@ The point here is that a person received the service from thier HH, or from some
 #| warning: false
 #| error: false
 
+# Clean up Provider TIN data
+# Remove any rogues spaces in any field in the data
+HHPrescriberNPI <-
+  HHPrescriberNPI |> 
+  mutate_all(str_squish)
 
-# Indicaters for services by the HH or not by the HH
-CHO_Roster2 <-
+# Indicaters for services by the HH (Including HH prescribers using their own NPI numbers) or not by the HH
+ProviderTINMatch <-
   CHO_Roster2 |> 
-  mutate(SvcByAssignedBHHTIN = if_else(Fedtaxid == BHHProvider_TIN, 1, 0)) |> 
-  mutate(SvcByOtherTIN = if_else(Fedtaxid != BHHProvider_TIN, 1, 0))
+  mutate(SvcByAssignedBHHTIN = if_else(Fedtaxid == BHHProvider_TIN | RenderingProviderNpi == HHPrescriberNPI$NPI, 1, 0)) |> 
+  mutate(SvcByOtherTIN = if_else(Fedtaxid != BHHProvider_TIN & RenderingProviderNpi != HHPrescriberNPI$NPI, 1, 0)) |> 
+  select(1, 49, 50)
 
-# Write to CSV
-# write.csv(CHO_Roster2, "./data/output/CHO_Roster2.csv")
+# Collapse data to a single row per person
 
-# Check it out cuz Ice is Ryhmin'
-Checkit <-
-  CHO_Roster2 |> 
-  select(c(1, 11, 10, 33, 35, 57, 58)
-    
+# Group by AHCCCSID and summarize using max to check if 1 occurs anywhere
+collapsed_data <- ProviderTINMatch |>
+  group_by(AHCCCSID) |>
+  summarize(
+    SvcByAssignedBHHTIN = max(SvcByAssignedBHHTIN),
+    SvcByOtherTIN = max(SvcByOtherTIN)
   )
+
+# Apply ifelse to convert max value to 1 if it's greater than 0, else 0
+collapsed_data$SvcByAssignedBHHTIN <- ifelse(collapsed_data$SvcByAssignedBHHTIN > 0, 1, 0)
+collapsed_data$SvcByOtherTIN <- ifelse(collapsed_data$SvcByOtherTIN > 0, 1, 0)
+
+collapsed_data <-
+  collapsed_data |> 
+  mutate(SvcByBoth = if_else(SvcByAssignedBHHTIN + SvcByOtherTIN == 2, 1, 0))
+
+# Add new indicators to CHO_Roster1
+CHO_Roster1 <-
+  merge(x = CHO_Roster1,
+        y = collapsed_data,
+        by = "AHCCCSID",
+        all.x = TRUE)
 
 ```
 
-# Add Z-Code Indicators
+## Add Z-Code Indicators
 
 ```{r}
 #| label: Z Code indicators
@@ -343,7 +365,113 @@ for (col in names(CHO_Roster2)) {
   }
 }
 
+# Look through each column starting with PrimaryDiagnosis
+for (col in names(CHO_Roster2)) {
+  if (startsWith(col, "PrimaryDiagnosis")) {
+    # Check for any value that starts with "Z55" and update Z55 column
+    CHO_Roster2$Zcd_Z55 <- ifelse(grepl("^Z55", CHO_Roster2[, col]), 1, CHO_Roster2$Zcd_Z55)
+    # Check for any value that starts with "Z56" and update Z56 column
+    CHO_Roster2$Zcd_Z56 <- ifelse(grepl("^Z56", CHO_Roster2[, col]), 1, CHO_Roster2$Zcd_Z56)
+    # Check for any value that starts with "Z57" and update Z57 column
+    CHO_Roster2$Zcd_Z57 <- ifelse(grepl("^Z57", CHO_Roster2[, col]), 1, CHO_Roster2$Zcd_Z57)
+    # Check for any value that starts with "Z59" and update Z59 column
+    CHO_Roster2$Zcd_Z59 <- ifelse(grepl("^Z59", CHO_Roster2[, col]), 1, CHO_Roster2$Zcd_Z59)
+    # Check for any value that starts with "Z60" and update Z60 column
+    CHO_Roster2$Zcd_Z60 <- ifelse(grepl("^Z60", CHO_Roster2[, col]), 1, CHO_Roster2$Zcd_Z60)
+    # Check for any value that starts with "Z62" and update Z62 column
+    CHO_Roster2$Zcd_Z62 <- ifelse(grepl("^Z62", CHO_Roster2[, col]), 1, CHO_Roster2$Zcd_Z62)
+    # Check for any value that starts with "Z63" and update Z63 column
+    CHO_Roster2$Zcd_Z63 <- ifelse(grepl("^Z63", CHO_Roster2[, col]), 1, CHO_Roster2$Zcd_Z63)
+    # Check for any value that starts with "Z64" and update Z64 column
+    CHO_Roster2$Zcd_Z64 <- ifelse(grepl("^Z64", CHO_Roster2[, col]), 1, CHO_Roster2$Zcd_Z64)
+    # Check for any value that starts with "Z65" and update Z65 column
+    CHO_Roster2$Zcd_Z65 <- ifelse(grepl("^Z65", CHO_Roster2[, col]), 1, CHO_Roster2$Zcd_Z65)
+    # Check for any value that starts with "Z75" and update Z75 column
+    CHO_Roster2$Zcd_Z75 <- ifelse(grepl("^Z75", CHO_Roster2[, col]), 1, CHO_Roster2$Zcd_Z75)
+  }
+}
+
+# Select columns for analysis
+collapsed_data <-
+  CHO_Roster2 |> 
+  select(1, 49:58)
+
+# Group by AHCCCSID and check for the presence of 1 in each Zcd column
+collapsed_data <- CHO_Roster2 |>
+  group_by(AHCCCSID) |>
+  summarise(across(starts_with("Zcd"), ~ as.integer(any(. == 1))))
+
+# Create a new column with the sum across columns 2 to 11
+collapsed_data$Sum_ZCode <- rowSums(collapsed_data[, 2:11], na.rm = TRUE)
+
+# Create an indicator for if any Z codes are present across all diagnoses
+collapsed_data <-
+  collapsed_data |> 
+  mutate(ZCodePresent = if_else(Sum_ZCode > 0, 1, 0))
+
+# Select the first instance of AHCCCSID with priority to ZCode equals 1
+selected_data <- collapsed_data %>%
+  arrange(AHCCCSID, desc(ZCodePresent)) %>%
+  distinct(AHCCCSID, .keep_all = TRUE)
+
+CHO_Roster1 <-
+  merge(x = CHO_Roster1,
+        y = selected_data,
+        by = "AHCCCSID",
+        all.x = TRUE)
+
 ```
+
+# Now add Inpatient Indicators
+
+```{r}
+
+# Inpatient Stay and Nonacute Inpatient Stay List
+
+# Filter the MyHEDIS2023_MedicationDirectory for "Inpatient Stay"
+InpatientStayValueSet <- MyHEDIS2023_AllValueSetsToCodes |>
+  mutate_all(~str_trim(., side = "right")) |> # trim off extra spaces
+  filter(`Value Set Name` == "Inpatient Stay")
+
+# Extract the associated code values as a vector
+InpatientStayValueSetList <- InpatientStayValueSet$Code
+
+# Filter the MyHEDIS2023_MedicationDirectory for "Inpatient Stay"
+NonacuteInpatientValueSet <- MyHEDIS2023_AllValueSetsToCodes |>
+  mutate_all(~str_trim(., side = "right")) |> # trim off extra spaces
+  filter(`Value Set Name` == "Nonacute Inpatient")
+
+# Extract the associated code values as a vector
+NonacuteInpatientValueSetList <- NonacuteInpatientValueSet$Code
+
+CHO_Roster2 <-
+  CHO_Roster2 |> 
+  mutate(Inpatient = if_else(Svccode %in% InpatientStayValueSetList | Svccode %in% NonacuteInpatientValueSetList, 1, 0))
+
+# Now collapse it
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 ```{r}
@@ -355,33 +483,6 @@ for (col in names(CHO_Roster2)) {
 #| error: false
 
 
-# Select variables
-selected_vars <- c("AHCCCSID", "Zcd_Z55", "Zcd_Z56", "Zcd_Z57", "Zcd_Z59", "Zcd_Z60", "Zcd_Z62", "Zcd_Z63", "Zcd_Z64", "Zcd_Z65", "Zcd_Z75")
-
-# Group by AHCCCSID and collapse data
-collapsed_data <- CHO_Roster2 %>%
-  select(selected_vars) %>%
-  group_by(AHCCCSID) %>%
-  summarise_all(list(~ max(.)))
-
-# drop repeated columns
-CHO_Roster2 <-
-  CHO_Roster2 [, -c(59:68)]
-
-CHO_Roster3 <-
-  merge(x = CHO_Roster2,
-        y = collapsed_data,
-        by = "AHCCCSID",
-        all.x = TRUE)
-
-
-Checkit <-
-  CHO_Roster3 |> 
-  select(c(1:14,54:68)
-  )
-
-# Write to csv
-write.csv(CHO_Roster3, "./data/output/CHO_Roster3.csv")
 
 ```
 
