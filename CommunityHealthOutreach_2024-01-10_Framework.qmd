@@ -186,6 +186,29 @@ ORDER BY LastName DESC
 
 ```
 
+### DugLess
+
+This brings in various data from the DUGLess
+
+```{sql, connection = QRPTP01, output.var = "GM_DUGLess"}
+
+declare @AzACC int = narbha.dbo.ufn_GetIntLobIdFromLobName('ArizonaAcc', getdate());
+
+-- declare @AzRbha int = narbha.dbo.ufn_GetIntLobIdFromLobName('AzRBHA', getdate());
+
+-- declare @AzSO int = narbha.dbo.ufn_GetIntLobIdFromLobName('AZ State Only', getdate());
+
+-- declare @AzHCIC int = narbha.dbo.ufn_GetIntLobIdFromLobName('HCIC', getdate());
+
+SELECT * 
+
+FROM GlobalMembers.dbo.DUGLessDemographics
+
+WHERE lobid = @AzACC 
+  AND void = 0 
+
+```
+
 ### Claims for last service
 
 This set of code identifies the last service provided for certain provider types. This data provides additional information for health homes to conduct meaningful outreach.
@@ -199,12 +222,14 @@ WITH RankedClaims AS (
         PrimaryID,
         BegDate,
         ProviderName,
-		ProviderType,
+		    ProviderType,
+		    Fedtaxid, 
+		    RenderingProviderNpi,
         ROW_NUMBER() OVER (PARTITION BY PrimaryID ORDER BY BegDate DESC) AS rn
     FROM claims.dbo.shcavos
     --WHERE BegDate >= @start AND BegDate <= @end
 )
-SELECT PrimaryID, BegDate, ProviderName
+SELECT PrimaryID, BegDate, ProviderName, Fedtaxid, RenderingProviderNpi
 FROM RankedClaims
 WHERE rn = 1
     AND ProviderType IN ('02','29', '64', '63', '71', 
@@ -240,31 +265,19 @@ AllianceEnrolledMembers_Merge <-
 AllianceEnrolledMembers_Merge <-  
   AllianceEnrolledMembers_Merge |> 
   filter(Void.x == FALSE & Void.y == FALSE) |>  # FALSE = The record has not be voided
-  select(
-    PrimaryId,
-    LastName,
-    FirstName,
-    EnrollmentDate,
-    DisenrollmentDate,
-    DOB,
-    DOD,
-    Sex,
-    MaritalStatus,
-    Race,
-    Ethnicity,
-    SpokenLanguage,
-    NativeLanguage
-  )
+  select(1, 4, 5, 30, 28, 31:37, 44, 61)
 
 AllianceEnrolledMembers_Merge <-
   merge(x = AllianceEnrolledMembers_Merge,
-        y = GM_ALLAZ_Enrollments, # Adds AHCCCSID
+        y = GM_ALLAZ_Enrollments, # Adds AHCCCSID and BHHShortname
         by = "PrimaryId",
         all.x = TRUE)
 
 AllianceEnrolledMembers_Merge <-
   AllianceEnrolledMembers_Merge |> 
-  rename("AHCCCSID" = AhcccsId)
+  #rename("AHCCCSID" = AhcccsId) |> 
+  select(1, 17, 2:14, 42)
+
 
 AllianceEnrolledMembers_Merge <-
   merge(x = AllianceEnrolledMembers_Merge,
@@ -278,27 +291,9 @@ AllianceEnrolledMembers_Merge$BHHProvider_TIN <- gsub("-", "", AllianceEnrolledM
 # Select variables for analysis
 AllianceEnrolledMembers_Merge <-
   AllianceEnrolledMembers_Merge |> 
-  select(
-    PrimaryId,
-    AHCCCSID,
-    LastName,
-    FirstName,
-    BHHShortName,
-    BHHLongName,
-    BHHProvider_TIN,
-    EnrollmentDate.x,
-    DisenrollmentDate.x,
-    DOB,
-    DOD,
-    Sex,
-    MaritalStatus,
-    Race,
-    Ethnicity,
-    SpokenLanguage,
-    NativeLanguage,
-    LineOfBusiness
-  )
+  select(2, 3, 6, 7, 1, 17, 4, 5, 8:16)
 
+# Rename to remove the .x
 AllianceEnrolledMembers_Merge <-
   AllianceEnrolledMembers_Merge |> 
   rename("EnrollmentDate" = EnrollmentDate.x,
@@ -310,36 +305,25 @@ AllianceEnrolledMembers_Merge <-
         by = "PrimaryId",
         all.x = TRUE)
 
+# Select Variables
 AllianceEnrolledMembers_Merge <- 
   AllianceEnrolledMembers_Merge |> 
-  filter(Void == FALSE) |> # filters out any voided entries
-  select(
-    PrimaryId,
-    AHCCCSID,
-    LastName,
-    FirstName,
-    BHHShortName,
-    BHHLongName,
-    BHHProvider_TIN,
-    EnrollmentDate,
-    DisenrollmentDate,
-    DOB,
-    DOD,
-    Sex,
-    MaritalStatus,
-    Race,
-    Ethnicity,
-    SpokenLanguage,
-    NativeLanguage,
-    ResCountyName, # Senior finance leaders report this field may not be 100% reliable
-    ResAddr1, # Senior finance leaders report this field may not be 100% reliable
-    ResCity, # Senior finance leaders report this field may not be 100% reliable
-    ResEffDate,
-    HomePhone,
-    EmergencyPhone,
-    EmailAddress
-  )
+  select(1:17, 22, 24, 44, 34, 35, 60)
 
+# Add DUGLess variables
+AllianceEnrolledMembers_Merge <-
+  merge(x = AllianceEnrolledMembers_Merge,
+        y = GM_DUGLess,
+        by = "AhcccsId",
+        all.x = TRUE)
+
+# Select Variables
+AllianceEnrolledMembers_Merge <- 
+  AllianceEnrolledMembers_Merge |> 
+  select(1:16, 18:23, 48, 51) |> 
+  rename(PrimaryId = "PrimaryId.x",
+         DOB = "DOB.x",
+         EmploymentStatus = "EmploymentStatus.y")
 
 # Remove any rogues spaces in any field in the data
 AllianceEnrolledMembers_Merge <- 
@@ -350,33 +334,250 @@ AllianceEnrolledMembers_Merge <-
 # Next, we make it just Alliance Members
 
 # Filter for The Alliance Providers
-# This is about 383,977 people
+# This is about 385,264 people
 AllianceEnrolledMembers <-
   AllianceEnrolledMembers_Merge |> 
   filter(BHHShortName %in% Provider_ShortName)
 
 # Then filter for the 5 northern counties
-# This is about 312612 people
+# This is about 313,722 people
 AllianceEnrolledMembers <-
   AllianceEnrolledMembers |> 
   filter(ResCountyName %in% NAZ_Counties)
 
 # Filter out deceased people (no offense intended)
-# This is about 306,515 people
+# This is about 307, 613 people
 AllianceEnrolledMembers <-
   AllianceEnrolledMembers |> 
   filter(is.na(DOD))
 
 # Filter out end dated enrollment segments
 # This leaves us with only active enrollments
-AllianceEnrolledMembers <-
-  AllianceEnrolledMembers |> 
-  filter(is.na(DisenrollmentDate))
+# AllianceEnrolledMembers <-
+#   AllianceEnrolledMembers |> 
+#   filter(is.na(DisenrollmentDate))
 
-# This table is the record of all living individuals who have an active enrollment with BCBS HCA ACC health plan who are auto-assigned to an Alliance Provider, and who have a residential address in the northern GSA counties. In other words, this is a roster of all active Alliance ACO members.
+# This table is the record of all living individuals who have an enrollment with BCBS HCA ACC health plan who are auto-assigned to an Alliance Provider, and who have a residential address in the northern GSA counties. In other words, this is a roster of all Alliance ACO members.
 
 # Drop the Enrolled Members Merge file because we don't need non-Alliance Members for this
 # rm(AllianceEnrolledMembers_Merge)
+
+```
+
+### Demographics
+
+#### Race and Ethnicity
+
+```{r}
+# Add Race Codes
+RaceCodes <- read.csv("./documents/RaceCodes.csv")
+
+RaceCodes <- 
+  RaceCodes |> 
+  select(
+    HipaaCode,
+    HipaaDescription
+  ) |> 
+  rename(Race = "HipaaCode",
+         Race1 = "HipaaDescription")
+
+AllianceEnrolledMembers <-
+  merge(x = AllianceEnrolledMembers,
+        y = RaceCodes,
+        by = "Race",
+        all.x = TRUE)
+
+AllianceEnrolledMembers <-
+  AllianceEnrolledMembers |> 
+  rename(RaceCode = "Race",
+         Race = "Race1")
+
+# AllianceEnrolledMembers <- 
+#   AllianceEnrolledMembers |> 
+#   select(-Race)
+
+# Add ethnicity
+EthnicityCodes <- read.csv("./documents/EthnicityCodes.csv")
+
+EthnicityCodes <-
+  EthnicityCodes |> 
+  select(
+    Code,
+    Description
+  ) |> 
+  rename(Ethnicity = "Code",
+         Ethnicity1 = "Description")
+
+EthnicityCodes <- 
+  EthnicityCodes |> 
+  slice(29:n())
+
+# format as numbers
+EthnicityCodes$Ethnicity <- as.numeric(EthnicityCodes$Ethnicity)
+AllianceEnrolledMembers$Ethnicity <- as.numeric(AllianceEnrolledMembers$Ethnicity)
+  
+AllianceEnrolledMembers <-
+  merge(x = AllianceEnrolledMembers,
+        y = EthnicityCodes,
+        by = "Ethnicity",
+        all.x = TRUE)
+
+AllianceEnrolledMembers <-
+  AllianceEnrolledMembers |> 
+  rename(EthnicityCode = "Ethnicity",
+         Ethnicity = "Ethnicity1")
+
+# AllianceEnrolledMembers <-
+#   AllianceEnrolledMembers |> 
+#   select(-Ethnicity)
+```
+
+#### Language
+
+```{r}
+LanguageCodes <- read.csv("./documents/LanguageCodes.csv")
+
+LanguageCodes <-
+  LanguageCodes |> 
+  select(
+    shortname,
+    name
+  ) |> 
+  rename(SpokenLanguage = "shortname",
+         SpokenLanguage1 = "name")
+
+# Trim Extra Characters
+LanguageCodes$SpokenLanguage <-
+  trimws(LanguageCodes$SpokenLanguage)
+LanguageCodes$SpokenLanguage1 <-
+  trimws(LanguageCodes$SpokenLanguage1)
+
+# Spoken Language
+AllianceEnrolledMembers <-
+  merge(x = AllianceEnrolledMembers,
+        y = LanguageCodes,
+        by = "SpokenLanguage",
+        all.x = TRUE)
+
+AllianceEnrolledMembers <-
+  AllianceEnrolledMembers |> 
+  rename(SpokenLanguageCode = "SpokenLanguage",
+         SpokenLanguage = "SpokenLanguage1")
+
+# AllianceEnrolledMembers <-
+#   AllianceEnrolledMembers |> 
+#   select(-SpokenLanguage)
+
+```
+
+### Other Characteristcs
+
+#### Marital Status
+
+```{r}
+MaritalStatusCodes <- read.csv("./documents/MaritalCodes.csv")
+
+MaritalStatusCodes <-
+  MaritalStatusCodes |> 
+  select(
+    Code,
+    Description
+  ) |> 
+  rename(MaritalStatus = "Code",
+         MaritalStatus1 = "Description")
+
+# Trim Extra Characters
+MaritalStatusCodes$MaritalStatus <-
+  trimws((MaritalStatusCodes$MaritalStatus))
+MaritalStatusCodes$MaritalStatus1 <-
+  trimws((MaritalStatusCodes$MaritalStatus1))
+
+# Spoken Language
+AllianceEnrolledMembers <-
+  merge(x = AllianceEnrolledMembers,
+        y = MaritalStatusCodes,
+        by = "MaritalStatus",
+        all.x = TRUE)
+
+AllianceEnrolledMembers <-
+  AllianceEnrolledMembers |> 
+  rename(MaritalStatusCode = "MaritalStatus",
+         MaritalStatus = "MaritalStatus1")
+
+```
+
+#### Employment Status
+
+```{r}
+
+EmploymentCodes <- read.csv("./documents/EmploymentCodes.csv")
+
+EmploymentCodes <-
+ EmploymentCodes |> 
+  select(
+    Code,
+    Description
+  ) |> 
+  rename(EmploymentStatus = "Code",
+         Employment1 = "Description")
+
+# Trim Extra Characters
+EmploymentCodes$EmploymentStatus <-
+  trimws(EmploymentCodes$EmploymentStatus)
+EmploymentCodes$Employment1 <-
+  trimws(EmploymentCodes$Employment1)
+
+# Spoken Language
+AllianceEnrolledMembers <-
+  merge(x = AllianceEnrolledMembers,
+        y = EmploymentCodes,
+        by = "EmploymentStatus",
+        all.x = TRUE)
+
+AllianceEnrolledMembers <-
+  AllianceEnrolledMembers |> 
+  rename(EmploymentStatusCode = "EmploymentStatus",
+         EmploymentStatus = "Employment1")
+
+```
+
+#### Military History
+
+```{r}
+
+MilitaryCodes <- read.csv("./documents/MilitaryCodes.csv")
+
+MilitaryCodes <-
+ MilitaryCodes |> 
+  select(
+    Code,
+    Description
+  ) |> 
+  rename(MilitaryStatus = "Code",
+         Military1 = "Description")
+
+# Trim Extra Characters
+MilitaryCodes$MilitaryStatus <-
+  trimws(MilitaryCodes$MilitaryStatus)
+MilitaryCodes$Military1 <-
+  trimws(MilitaryCodes$Military1)
+
+# Spoken Language
+AllianceEnrolledMembers <-
+  merge(x = AllianceEnrolledMembers,
+        y = MilitaryCodes,
+        by = "MilitaryStatus",
+        all.x = TRUE)
+
+AllianceEnrolledMembers <-
+  AllianceEnrolledMembers |> 
+  rename(MilitaryStatusCode = "MilitaryStatus",
+         MilitaryStatus = "Military1")
+
+# Select Variables
+AllianceEnrolledMembers <-
+  AllianceEnrolledMembers |> 
+  select(7:18, 1, 30, 2, 29, 3, 28, 4, 27, 6, 25, 5, 26, 19:24)
 
 ```
 
@@ -414,7 +615,6 @@ AllianceEnrolledMembers <-
 #| echo: true
 #| warning: false
 #| error: false
-
 
 # Write to CSV
  write.csv(AllianceEnrolledMembers, "./data/input/AllianceEnrolledMembers.csv")
@@ -469,8 +669,8 @@ SELECT
 FROM Claims.dbo.shcaVos
 
 WHERE BegDate BETWEEN @start AND @end 
-AND
-Void = 0
+--AND
+--Void = 0
 
 ```
 
@@ -928,18 +1128,24 @@ write.csv(Data_VBPQR_AllRecords, "./data/input/Data_VBPQR_AllRecords.csv")
 # List all objects in the environment
 objects_to_keep <- c("Data_VBPQR_AllRecords",
                      "Claims_AllHCA",
-                     "ClaimsPBM_AllHCA",
-                     "ClaimsAMM_AllHCA",
+                     #"ClaimsPBM_AllHCA",
+                     #"ClaimsAMM_AllHCA",
                      "AllianceEnrolledMembers",
                      "MyHEDIS2023_AllValueSetsToCodes",
                      "MyHEDIS2023_MedicationDirectory",
                      "ProviderTIN",
                      "QRPTP01",
                      "Z_Codes",
-                     "AntidepressantMedicationList",
+                     #"AntidepressantMedicationList",
                      "NAZ_Counties",
-                     "Provider_ShirtName",
-                     "ContractMeasures")  # Add more objects to keep as needed
+                     "Provider_ShortName",
+                     "ContractMeasures",
+                     "EmploymentCodes",
+                     "EthnicityCodes",
+                     "LanguageCodes",
+                     "MaritalStatusCodes",
+                     "MilitaryCodes",
+                     "RaceCodes")  # Add more objects to keep as needed
 
 # Get a list of objects in the environment
 all_objects <- ls()
