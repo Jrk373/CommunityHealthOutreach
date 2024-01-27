@@ -84,7 +84,7 @@ VBPTrendReport_colnames <-
     "Measure",
     "GapStatus")
 
-# COntract Measures List
+# Contract Measures List
 ContractMeasures <- c("AMM", "FUH", "FUM", "HDO", "FUA")
 
 # HEDIS Value Sets
@@ -186,9 +186,9 @@ ORDER BY LastName DESC
 
 ```
 
-### DugLess
+### DUGLess
 
-This brings in various data from the DUGLess
+This brings in various data from the DUGLess.
 
 ```{sql, connection = QRPTP01, output.var = "GM_DUGLess"}
 
@@ -238,11 +238,21 @@ WHERE rn = 1
 
 ```
 
+```{r}
+# Write enrollment data to files for easy test load.
+write.csv(GM_ALLAZ_Addresses, "./data/input/GM_AllAZAddresses.csv")
+write.csv(GM_ALLAZ_Enrollments, "./data/input/GM_AllAZ_Enrollments.csv")
+write.csv(GM_Clients_Demographics, "./data/input/GM_Clients_Demographics.csv")
+write.csv(GM_DUGLess, "./data/input/GM_DUGLess.csv")
+write.csv(GM_Enrollments_AllACC, "./data/input/GM_Enrollments_AllACC.csv")
+write.csv(LastService, "./data/input/LastService.csv")
+```
+
 ### Enrollment Calculation
 
 The following code goes through a procedure to combine the data from the collection of member information tables into a single enrollment roster.
 
-This table is the record of all living individuals who have an active enrollment with BCBS HCA ACC health plan who are auto-assigned to an Alliance Provider, and who have a residential address in the northern GSA counties. In other words, this is a roster of all active Alliance ACO members.
+This table is the record of all individuals who have an enrollment with BCBS HCA ACC health plan who are auto-assigned to an Alliance Provider, and who have a residential address in the northern GSA counties. In other words, this is a roster of all Alliance ACO members.
 
 ```{r}
 #| label: Enrollment Calculation
@@ -358,9 +368,6 @@ AllianceEnrolledMembers <-
 #   filter(is.na(DisenrollmentDate))
 
 # This table is the record of all living individuals who have an enrollment with BCBS HCA ACC health plan who are auto-assigned to an Alliance Provider, and who have a residential address in the northern GSA counties. In other words, this is a roster of all Alliance ACO members.
-
-# Drop the Enrolled Members Merge file because we don't need non-Alliance Members for this
-# rm(AllianceEnrolledMembers_Merge)
 
 ```
 
@@ -597,7 +604,9 @@ LastService <-
   LastService |> 
   rename("PrimaryId" = PrimaryID,
          "DateLastService" = BegDate,
-         "LastServiceProvider" = ProviderName)
+         "LastServiceProvider" = ProviderName,
+         "LastSvcProv_FedTaxID" = Fedtaxid,
+         "LastSvcProvNPI" = RenderingProviderNpi)
 
 AllianceEnrolledMembers <- 
   merge(x = AllianceEnrolledMembers,
@@ -668,9 +677,7 @@ SELECT
 
 FROM Claims.dbo.shcaVos
 
-WHERE BegDate BETWEEN @start AND @end 
---AND
---Void = 0
+WHERE BegDate BETWEEN @start AND @end
 
 ```
 
@@ -1153,6 +1160,7 @@ all_objects <- ls()
 # Remove objects except for those specified in objects_to_keep
 objects_to_remove <- all_objects[!all_objects %in% objects_to_keep]
 rm(list = objects_to_remove)
+rm(all_objects)
 
 ```
 

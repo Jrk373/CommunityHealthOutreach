@@ -17,11 +17,13 @@ format:
     footnotes-hover: true
 ---
 
-This document provides the data framework for the Community Health Outreach project. The core datasets used in that evaluation are collected through the code herein. 
+This document creates the Community Health Outreach Roster. The CHO is a collection of enrollment data, demographics, VBP results, and other indicators of clinical conditions and social risk factors. This roster will be used for ACO reporting, provider clinical outreach, and predictive modeling.
 
 # Method
 
 ## r Setup
+
+This sets up the R Studio with needed packages and other setting for the HTML rendering and data viewing.
 
 ```{r}
 #| label: Setup
@@ -126,7 +128,7 @@ Z_Codes <- read_xlsx("./documents/Z-Codes.xlsx", sheet = "Sheet1")
 
 ## Procedure
 
-### VBP Quality Roster Indicator 
+### VBP Quality Roster
 
 Create an indicator for if member is on VBPQR and add it to the Enrollment Roster
 
@@ -198,11 +200,9 @@ CHO_Roster1 <-
 
 ```
 
-## Claims
+### Claims
 
-### Alliance Only
-
-Filter the total claims table for only those people on the Alliance Enrolled Members roster. 
+Filter the AllHCA claims table for only those people on the Alliance Enrolled Members roster. Then attach the CHO Roster data to each claim.
 
 ```{r}
 #| label: Select Claims
@@ -267,7 +267,14 @@ CHO_Roster2 <-
 
 ### Health Home Service Provision
 
-This code provides an indicator for if the person has received services at either: Yes, at HH at least once in the last 6 months; No, never at their HH in the last 6 months: and Yes, the person has received services at both HH and non-HH.
+This code provides an indicator for if the person has received services at either: 
+
+  1.    Yes, at HH at least once in the last 6 months; 
+  2.    No, never at their HH in the last 6 months: and 
+  3.    Yes, the person has received services at both HH and non-HH.
+
+Calculations for the first option include cases where the service provider was associated with an Alliance Provider, but used a different Tax Identification Number.
+
 ```{r}
 #| label: Same prvider indicator
 #| eval: true
@@ -287,7 +294,7 @@ ProviderTINMatch <-
   CHO_Roster2 |> 
   mutate(SvcByAssignedBHHTIN = if_else(Fedtaxid == BHHProvider_TIN | RenderingProviderNpi == HHPrescriberNPI$NPI, 1, 0)) |> 
   mutate(SvcByOtherTIN = if_else(Fedtaxid != BHHProvider_TIN & RenderingProviderNpi != HHPrescriberNPI$NPI, 1, 0)) |> 
-  select(1, 49, 50)
+  select(1, 68, 69)
 
 # Collapse data to a single row per person
 
@@ -300,12 +307,16 @@ collapsed_data <- ProviderTINMatch |>
   )
 
 # Apply ifelse to convert max value to 1 if it's greater than 0, else 0
-collapsed_data$SvcByAssignedBHHTIN <- ifelse(collapsed_data$SvcByAssignedBHHTIN > 0, 1, 0)
-collapsed_data$SvcByOtherTIN <- ifelse(collapsed_data$SvcByOtherTIN > 0, 1, 0)
+# collapsed_data$SvcByAssignedBHHTIN <- ifelse(collapsed_data$SvcByAssignedBHHTIN > 0, 1, 0)
+# collapsed_data$SvcByOtherTIN <- ifelse(collapsed_data$SvcByOtherTIN > 0, 1, 0)
 
 collapsed_data <-
   collapsed_data |> 
   mutate(SvcByBoth = if_else(SvcByAssignedBHHTIN + SvcByOtherTIN == 2, 1, 0))
+
+collapsed_data <-
+  collapsed_data |> 
+  mutate(NoSvcs = if_else(SvcByAssignedBHHTIN + SvcByOtherTIN == 0, 1, 0))
 
 # Add new indicators to CHO_Roster1
 CHO_Roster1 <-
@@ -316,7 +327,9 @@ CHO_Roster1 <-
 
 ```
 
-## Add Z-Code Indicators
+### Social Risk Factors 
+
+These indicate if a person has a "Z-Code" diagnosis for each of several categories of social risk factors. In addition, this section provides a summary of the quantity of social risk factors experienced by a given individual.
 
 ```{r}
 #| label: Z Code indicators
@@ -422,9 +435,17 @@ CHO_Roster1 <-
 
 ```
 
-# Now add Inpatient Indicators
+### Inpatient Services
+
+Indicators according to NCQA MY 2024 standards for Follow Up after Hospitalization for Mental Illness (FUH) values sets. These include the Inpatient Stay and Nonacute Inpatient value sets.
 
 ```{r}
+#| label: Inpatient stay
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
 
 # Inpatient Stay and Nonacute Inpatient Stay List
 
@@ -449,7 +470,7 @@ CHO_Roster2 <-
   CHO_Roster2 |> 
   mutate(Inpatient = if_else(Svccode %in% InpatientStayValueSetList | Svccode %in% NonacuteInpatientValueSetList, 1, 0))
 
-# Group by AHCCCSID and check for the presence of 1 in Inpatient column
+# Group by AHCCCSID and check for the presence of 1 in Inpatient column and collapse data so there is only one row per AHCCCSID
 collapsed_data <- CHO_Roster2 %>%
   group_by(AHCCCSID) %>%
   summarise(Inpatient = as.integer(any(Inpatient == 1)))
@@ -462,9 +483,19 @@ CHO_Roster1 <-
 
 ```
 
-## Now add ED indicator
+### Emergency Department Visits 
+
+Indicator according to NCQA MY 2024 standards for Follow Up after Emergency Department visit for Mental Illness (FUM) values sets.
+
+#### Emergency Department (ED) Value Set
 
 ```{r}
+#| label: FUM ED
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
 
 # Inpatient Stay and Nonacute Inpatient Stay List
 
@@ -491,12 +522,55 @@ CHO_Roster1 <-
         y = collapsed_data,
         by = "AHCCCSID",
         all.x = TRUE)
+```
+
+#### Mental Illness and Intentional Self-harm (MISH) Value Set
+
+```{r}
+#| label: FUM MISH
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+# Filter the MyHEDIS2023_MedicationDirectory for "Mental Illness and Intentional Self-Harm "
+MISHValueSet <- MyHEDIS2023_AllValueSetsToCodes |>
+  mutate_all(~str_trim(., side = "right")) |> # trim off extra spaces
+  filter(`Value Set Name` == "Mental Illness and Intentional Self-Harm")
+
+# Extract the associated code values as a vector
+MISHValueSetList <- MISHValueSet$Code
+
+# create the indicator column
+CHO_Roster2 <-
+  CHO_Roster2 |> 
+  mutate(MISH = if_else(Svccode %in% MISHValueSetList, 1, 0))
+
+# Group by AHCCCSID and check for the presence of 1 in Inpatient column
+collapsed_data <- CHO_Roster2 %>%
+  group_by(AHCCCSID) %>%
+  summarise(MISH = as.integer(any(MISH == 1)))
+
+CHO_Roster1 <-
+  merge(x = CHO_Roster1,
+        y = collapsed_data,
+        by = "AHCCCSID",
+        all.x = TRUE)
 
 ```
 
-## Now add AMM indicator
+### Antidepressant Medication 
+
+Indicator according to NCQA MY 2024 standards for Follow Up after Antidepressant Medications (AMM) values sets.
 
 ```{r}
+#| label: Antidepressant Medications
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
 
 # AMM List
 
@@ -526,9 +600,19 @@ CHO_Roster1 <-
 
 ```
 
-## Now add SUD indicator
+### Substance Use and Dependance
+
+Now add an indicator for Substance Abuse and Dependence according to NCQA MY 2024 standards for AOD Abuse and Dependence Value Set values sets.
+
+#### Alchohol Abuse and Dependence
 
 ```{r}
+#| label: AOD Substance Use diagnoses
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
 
 # AOD Abuse and Dependence  Stay List
 
@@ -559,9 +643,19 @@ CHO_Roster1 <-
         y = collapsed_data,
         by = "AHCCCSID",
         all.x = TRUE)
+
+Checkit <- CHO_Roster1 |> select(1, 40:61)
 ```
 
+#### Unintentional Overdose
+
 ```{r}
+#| label: OD Substance USe
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
 
 # Unintentional Drug Overdose Stay List
 
@@ -592,6 +686,8 @@ CHO_Roster1 <-
         y = collapsed_data,
         by = "AHCCCSID",
         all.x = TRUE)
+
+Checkit <- CHO_Roster1 |> select(1, 40:62)
 ```
 
 ```{r}
@@ -606,22 +702,4 @@ write.csv(CHO_Roster1, "./data/output/CHO_Roster1.csv")
 
 
 
-
-
-
-
-
-
-
-```{r}
-#| label: Z-code collapse to single line
-#| eval: true
-#| include: false
-#| echo: false
-#| warning: false
-#| error: false
-
-
-
-```
 
