@@ -654,6 +654,7 @@ SELECT
     Population,
     RA,
     Svccode,
+    Units,
     BegDate,
     PrimaryDiagnosis,
     ProviderName,

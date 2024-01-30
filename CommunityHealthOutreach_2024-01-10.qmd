@@ -68,11 +68,15 @@ Claims_AllHCA <- read.csv("./data/input/Claims_AllHCA.csv")
 
 Data_VBPQR_AllRecords <- read.csv("./data/input/Data_VBPQR_AllRecords.csv")
 
+InpatientCensus <- read.csv("./data/input/AllianceDailyInpatientCensus_All2023.csv")
+
 HHPrescriberNPI <- read.csv("./documents/HHPrescriberNPI.csv")
 
 ```
 
 ## Common Objects
+
+Common objects are used throughout the program for queries and analysis.
 
 ```{r}
 #| label: Create Common Objects
@@ -113,7 +117,7 @@ VBPTrendReport_colnames <-
     "Measure",
     "GapStatus")
 
-# COntract Measures List
+# Contract Measures List
 ContractMeasures <- c("AMM", "FUH", "FUM", "HDO", "FUA")
 
 # HEDIS Value Sets
@@ -198,11 +202,13 @@ CHO_Roster1 <-
         by = "AHCCCSID",
         all.x = TRUE)
 
+# Check it and see, you're hot blooded :)
+Checkit <- CHO_Roster1 |> select(1, 36:41)
 ```
 
 ### Claims
 
-Filter the AllHCA claims table for only those people on the Alliance Enrolled Members roster. Then attach the CHO Roster data to each claim.
+Filter the AllHCA claims table for only those people on the Alliance Enrolled Members roster. Then attach the CHO Roster data to each claim. This data frame will be a foundation for creating many indicators.
 
 ```{r}
 #| label: Select Claims
@@ -225,6 +231,7 @@ Claims_AllAlliance <-
     #Population,
     RA,
     Svccode,
+    #Units,
     BegDate,
     PrimaryDiagnosis,
     ProviderName,
@@ -294,7 +301,7 @@ ProviderTINMatch <-
   CHO_Roster2 |> 
   mutate(SvcByAssignedBHHTIN = if_else(Fedtaxid == BHHProvider_TIN | RenderingProviderNpi == HHPrescriberNPI$NPI, 1, 0)) |> 
   mutate(SvcByOtherTIN = if_else(Fedtaxid != BHHProvider_TIN & RenderingProviderNpi != HHPrescriberNPI$NPI, 1, 0)) |> 
-  select(1, 68, 69)
+  select(1, 69, 70)
 
 # Collapse data to a single row per person
 
@@ -306,17 +313,13 @@ collapsed_data <- ProviderTINMatch |>
     SvcByOtherTIN = max(SvcByOtherTIN)
   )
 
-# Apply ifelse to convert max value to 1 if it's greater than 0, else 0
-# collapsed_data$SvcByAssignedBHHTIN <- ifelse(collapsed_data$SvcByAssignedBHHTIN > 0, 1, 0)
-# collapsed_data$SvcByOtherTIN <- ifelse(collapsed_data$SvcByOtherTIN > 0, 1, 0)
-
 collapsed_data <-
   collapsed_data |> 
   mutate(SvcByBoth = if_else(SvcByAssignedBHHTIN + SvcByOtherTIN == 2, 1, 0))
 
 collapsed_data <-
   collapsed_data |> 
-  mutate(NoSvcs = if_else(SvcByAssignedBHHTIN + SvcByOtherTIN == 0, 1, 0))
+  mutate(NoSvcs = if_else(SvcByAssignedBHHTIN == 0 & SvcByOtherTIN == 0, 1, 0))
 
 # Add new indicators to CHO_Roster1
 CHO_Roster1 <-
@@ -324,6 +327,9 @@ CHO_Roster1 <-
         y = collapsed_data,
         by = "AHCCCSID",
         all.x = TRUE)
+
+# Check it
+Checkit <- CHO_Roster1 |> select(1, 36:45)
 
 ```
 
@@ -404,11 +410,6 @@ for (col in names(CHO_Roster2)) {
   }
 }
 
-# # Select columns for analysis
-# collapsed_data <-
-#   CHO_Roster2 |> 
-#   select(1, 49:58)
-
 # Group by AHCCCSID and check for the presence of 1 in each Zcd column
 collapsed_data <- CHO_Roster2 |>
   group_by(AHCCCSID) |>
@@ -423,8 +424,8 @@ collapsed_data <-
   mutate(ZCodePresent = if_else(Sum_ZCode > 0, 1, 0))
 
 # Select the first instance of AHCCCSID with priority to ZCode equals 1
-selected_data <- collapsed_data %>%
-  arrange(AHCCCSID, desc(ZCodePresent)) %>%
+selected_data <- collapsed_data |>
+  arrange(AHCCCSID, desc(ZCodePresent)) |>
   distinct(AHCCCSID, .keep_all = TRUE)
 
 CHO_Roster1 <-
@@ -432,6 +433,8 @@ CHO_Roster1 <-
         y = selected_data,
         by = "AHCCCSID",
         all.x = TRUE)
+
+Checkit <- CHO_Roster1 |> select(1, 36:57)
 
 ```
 
@@ -471,8 +474,8 @@ CHO_Roster2 <-
   mutate(Inpatient = if_else(Svccode %in% InpatientStayValueSetList | Svccode %in% NonacuteInpatientValueSetList, 1, 0))
 
 # Group by AHCCCSID and check for the presence of 1 in Inpatient column and collapse data so there is only one row per AHCCCSID
-collapsed_data <- CHO_Roster2 %>%
-  group_by(AHCCCSID) %>%
+collapsed_data <- CHO_Roster2 |>
+  group_by(AHCCCSID) |>
   summarise(Inpatient = as.integer(any(Inpatient == 1)))
 
 CHO_Roster1 <-
@@ -481,7 +484,107 @@ CHO_Roster1 <-
         by = "AHCCCSID",
         all.x = TRUE)
 
+Checkit <- CHO_Roster1 |> select(1, 36:58)
+
 ```
+
+### Authorized Inpatient Service
+
+This procedure utilizes the Alliance Daily Inpatient Census, which is a daily record obtained from BCBSAZ Health Choice indicating all individuals who are currently inpatient, or who were inpatient and have been discharged. This data is based on authorizations from HC medical management. The Inpatient Census includes cases with admission dates between 2023-01-01 and 2023-12-31.
+
+#### All authorized inpatient stays
+
+This will provide an indicator to the CHO Roster for any case that has an inpatient admission date.
+
+```{r}
+#| label: Inpatient Census
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+# Identify all cases on CHO Roster 1 that have an authorized inpatient admission
+CHO_Roster1 <-
+  CHO_Roster1 |> 
+  mutate(Auth_IPAdmit = if_else(AHCCCSID %in% InpatientCensus$AHCCCSID, 1, 0))
+
+# Count the number of admissions for each AHCCCS ID on the Inpatient Census
+
+# Create a summary table grouping by AHCCCSID
+summary_table <- 
+  InpatientCensus |>
+  group_by(AHCCCSID) |>
+  summarise(Sum_Auth_IPAdmits = n())
+
+CHO_Roster1 <-
+  merge(x = CHO_Roster1,
+        y = summary_table,
+        by = "AHCCCSID",
+        all.x = TRUE)
+
+Checkit <- CHO_Roster1 |> select(1, 39:60)
+
+```
+
+#### Maximum Length of Stay (LOS)
+
+This procedure will calculate an individuals length of stay in an authorized inpatient stay. For those cases that do not have a discharge date, the discharge date will be recorded as the last day of the Measurement Year, 2023-12-31. For cases where there was more than 1 admission, the greatest length of stay will be recorded.
+
+```{r}
+#| label: Max Length of Stay
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+InpatientCensus <-
+  InpatientCensus |> 
+  mutate(DischargeDate = if_else(is.na(DischargeDate), "2023-12-31", DischargeDate)) |> 
+  mutate(AdmissionDate = as.Date(AdmissionDate),
+         DischargeDate = as.Date(DischargeDate))
+
+# Calculate length of stay from the admit and discharge dates
+summary_table <-
+  InpatientCensus |> 
+  mutate(LOS = DischargeDate - AdmissionDate) |> 
+  select(AHCCCSID, LOS)
+
+# Group by AHCCCSID, arrange by LOS in descending order, and select the first row for each group
+max_los_table <- 
+  summary_table |>
+  group_by(AHCCCSID) |>
+  arrange(desc(LOS)) |>
+  slice(1) |> 
+  rename(Max_LOS = "LOS")
+
+CHO_Roster1 <-
+  merge(x = CHO_Roster1,
+        y = max_los_table,
+        by = "AHCCCSID",
+        all.x = TRUE)
+
+# Group by AHCCCSID and calculate the average LOS
+average_los_table <- 
+  summary_table |>
+  group_by(AHCCCSID) |>
+  summarise(AVG_LOS = mean(LOS, na.rm = TRUE))
+
+CHO_Roster1 <-
+  merge(x = CHO_Roster1,
+        y = average_los_table,
+        by = "AHCCCSID",
+        all.x = TRUE)
+
+Checkit <- CHO_Roster1 |> select(1, 36:62)
+
+```
+
+#### Discharge Dispositions
+
+*This is a topic that we can explore further. The data is somewhat irregular and would require interpretation.*
+
 
 ### Emergency Department Visits 
 
@@ -513,8 +616,8 @@ CHO_Roster2 <-
   mutate(ED = if_else(Svccode %in% EDValueSetList, 1, 0))
 
 # Group by AHCCCSID and check for the presence of 1 in Inpatient column
-collapsed_data <- CHO_Roster2 %>%
-  group_by(AHCCCSID) %>%
+collapsed_data <- CHO_Roster2 |>
+  group_by(AHCCCSID) |>
   summarise(ED = as.integer(any(ED == 1)))
 
 CHO_Roster1 <-
@@ -522,6 +625,8 @@ CHO_Roster1 <-
         y = collapsed_data,
         by = "AHCCCSID",
         all.x = TRUE)
+
+Checkit <- CHO_Roster1 |> select(1, 36:63)
 ```
 
 #### Mental Illness and Intentional Self-harm (MISH) Value Set
@@ -548,8 +653,8 @@ CHO_Roster2 <-
   mutate(MISH = if_else(Svccode %in% MISHValueSetList, 1, 0))
 
 # Group by AHCCCSID and check for the presence of 1 in Inpatient column
-collapsed_data <- CHO_Roster2 %>%
-  group_by(AHCCCSID) %>%
+collapsed_data <- CHO_Roster2 |>
+  group_by(AHCCCSID) |>
   summarise(MISH = as.integer(any(MISH == 1)))
 
 CHO_Roster1 <-
@@ -557,6 +662,8 @@ CHO_Roster1 <-
         y = collapsed_data,
         by = "AHCCCSID",
         all.x = TRUE)
+
+Checkit <- CHO_Roster1 |> select(1, 36:64)
 
 ```
 
@@ -588,8 +695,8 @@ CHO_Roster2 <-
   mutate(AM = if_else(MedicationNDC %in% AntidressantMedicationsValueSetList, 1, 0))
 
 # Group by AHCCCSID and check for the presence of 1 in Inpatient column
-collapsed_data <- CHO_Roster2 %>%
-  group_by(AHCCCSID) %>%
+collapsed_data <- CHO_Roster2 |>
+  group_by(AHCCCSID) |>
   summarise(AM = as.integer(any(AM == 1)))
 
 CHO_Roster1 <-
@@ -597,6 +704,8 @@ CHO_Roster1 <-
         y = collapsed_data,
         by = "AHCCCSID",
         all.x = TRUE)
+
+Checkit <- CHO_Roster1 |> select(1, 36:65)
 
 ```
 
@@ -625,17 +734,17 @@ AODAbuseandDependenceValueSet <- MyHEDIS2023_AllValueSetsToCodes |>
 AODAbuseandDependenceValueSetList <- AODAbuseandDependenceValueSet$Code
 
 # Create a new column AOD and set it to 1 if any of the Dx columns contain the specified values, else set it to 0
-CHO_Roster2 <- CHO_Roster2 %>%
+CHO_Roster2 <- CHO_Roster2 |>
   mutate(AOD = as.integer(rowSums(across(starts_with("Dx"), ~. %in% AODAbuseandDependenceValueSetList)) > 0))
 
 # Create a new column AOD and set it to 1 if any of the Dx or PrimaryDiagnosis columns contain the specified values, else set it to 0
-CHO_Roster2 <- CHO_Roster2 %>%
+CHO_Roster2 <- CHO_Roster2 |>
   mutate(AOD = as.integer(rowSums(across(starts_with("Dx"), ~. %in% AODAbuseandDependenceValueSetList)) > 0 |
                               PrimaryDiagnosis %in% AODAbuseandDependenceValueSetList))
 
 # Group by AHCCCSID and check for the presence of 1 in Inpatient column
-collapsed_data <- CHO_Roster2 %>%
-  group_by(AHCCCSID) %>%
+collapsed_data <- CHO_Roster2 |>
+  group_by(AHCCCSID) |>
   summarise(AOD = as.integer(any(AOD == 1)))
 
 CHO_Roster1 <-
@@ -644,7 +753,7 @@ CHO_Roster1 <-
         by = "AHCCCSID",
         all.x = TRUE)
 
-Checkit <- CHO_Roster1 |> select(1, 40:61)
+Checkit <- CHO_Roster1 |> select(1, 36:66)
 ```
 
 #### Unintentional Overdose
@@ -667,18 +776,14 @@ UnintentionalDrugOverdoseValueSet <- MyHEDIS2023_AllValueSetsToCodes |>
 # Extract the associated code values as a vector
 UnintentionalDrugOverdoseValueSetList <- UnintentionalDrugOverdoseValueSet$Code
 
-# Create a new column AOD and set it to 1 if any of the Dx columns contain the specified values, else set it to 0
-#CHO_Roster2 <- CHO_Roster2 %>%
-#  mutate(UOD = as.integer(rowSums(across(starts_with("Dx"), ~. %in% UnintentionalDrugOverdoseValueSetList)) > 0))
-
 # Create a new column AOD and set it to 1 if any of the Dx or PrimaryDiagnosis columns contain the specified values, else set it to 0
-CHO_Roster2 <- CHO_Roster2 %>%
+CHO_Roster2 <- CHO_Roster2 |>
   mutate(UOD = as.integer(rowSums(across(starts_with("Dx"), ~. %in% UnintentionalDrugOverdoseValueSetList)) > 0 |
                               PrimaryDiagnosis %in% UnintentionalDrugOverdoseValueSetList))
 
 # Group by AHCCCSID and check for the presence of 1 in Inpatient column
-collapsed_data <- CHO_Roster2 %>%
-  group_by(AHCCCSID) %>%
+collapsed_data <- CHO_Roster2 |>
+  group_by(AHCCCSID) |>
   summarise(UOD = as.integer(any(UOD == 1)))
 
 CHO_Roster1 <-
@@ -687,7 +792,7 @@ CHO_Roster1 <-
         by = "AHCCCSID",
         all.x = TRUE)
 
-Checkit <- CHO_Roster1 |> select(1, 40:62)
+Checkit <- CHO_Roster1 |> select(1, 36:67)
 ```
 
 ### Major Depressive Disorder
@@ -711,13 +816,13 @@ MajorDepressionValueSet <- MyHEDIS2023_AllValueSetsToCodes |>
 MajorDepressionValueSetList <- MajorDepressionValueSet$Code
 
 # Create a new column AOD and set it to 1 if any of the Dx or PrimaryDiagnosis columns contain the specified values, else set it to 0
-CHO_Roster2 <- CHO_Roster2 %>%
+CHO_Roster2 <- CHO_Roster2 |>
   mutate(MDD = as.integer(rowSums(across(starts_with("Dx"), ~. %in% MajorDepressionValueSetList)) > 0 |
                               PrimaryDiagnosis %in% MajorDepressionValueSetList))
 
 # Group by AHCCCSID and check for the presence of 1 in Inpatient column
-collapsed_data <- CHO_Roster2 %>%
-  group_by(AHCCCSID) %>%
+collapsed_data <- CHO_Roster2 |>
+  group_by(AHCCCSID) |>
   summarise(MDD = as.integer(any(MDD == 1)))
 
 CHO_Roster1 <-
@@ -726,7 +831,7 @@ CHO_Roster1 <-
         by = "AHCCCSID",
         all.x = TRUE)
 
-Checkit <- CHO_Roster1 |> select(1, 40:63)
+Checkit <- CHO_Roster1 |> select(1, 36:68)
 ```
 
 ### BIPOC
@@ -760,7 +865,7 @@ CHO_Roster1 <- CHO_Roster1 |>
 
 
 
-Checkit <- CHO_Roster1 |> select(1, 21:24, 40:67)
+Checkit <- CHO_Roster1 |> select(1, 20:25, 36:72)
 ```
 
 ```{r}
