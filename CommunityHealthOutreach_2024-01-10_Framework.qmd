@@ -1165,9 +1165,38 @@ rm(all_objects)
 
 ```
 
+# PFro Services
 
+```{r}
+#| label: PFro Services
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
 
+PFroProviders <-
+  data.frame(
+    ProviderName = c("CARING CONNECTIONS FOR SPECIAL",
+                     "RECOVERY EMPOWERMENT NTWK",
+                     "Coyote Taskforce",
+                     "TRANSITIONAL LVNG CNT CG",
+                     "Avant Recovery",
+                     "NAZCARE, Inc - All",
+                     "Mentally Ill Kids In Distress",
+                     "Hope Lives",
+                     "Hope, Inc",
+                     "AZCHR (Cheers)",
+                     "S.T.A.R STAND TOGETHER AN",
+                     "FAMILY INVOLVEMENT CENTER",
+                     "Raising Special Kids"),
+    ProviderTIN = c("260647102", "870751247", "", "204215998", "", "50533759", "860673994", "452300190", "", "", "860586210", "710890534", ""),
+    ProviderNPI = c("1750791836", "1437307774", "", "1568696565", "", "1437599230", "1851735369", "1073935326", "", "", "1720265747", "1366884413", "")
+  )
 
+write.csv(PFroProviders, "./documents/PFroProviders.csv")
+
+```
 
 
 
