@@ -242,7 +242,7 @@ Claims_AllAlliance <-
     ProviderType,
     Dx1, Dx2, DX3, Dx4, Dx5, DX6,
     Dx7, Dx8, DX9, Dx10, Dx11, DX12,
-    #Calcnetpd,
+    Calcnetpd,
     #MemberACCGSA,
     #MemberServiceArea,
     #MemberZipcode,
@@ -301,7 +301,7 @@ ProviderTINMatch <-
   CHO_Roster2 |> 
   mutate(SvcByAssignedBHHTIN = if_else(Fedtaxid == BHHProvider_TIN | RenderingProviderNpi == HHPrescriberNPI$NPI, 1, 0)) |> 
   mutate(SvcByOtherTIN = if_else(Fedtaxid != BHHProvider_TIN & RenderingProviderNpi != HHPrescriberNPI$NPI, 1, 0)) |> 
-  select(1, 69, 70)
+  select(1, 70, 71)
 
 # Collapse data to a single row per person
 
@@ -488,6 +488,38 @@ Checkit <- CHO_Roster1 |> select(1, 36:58)
 
 ```
 
+#### Cost: Inpatient Services
+
+```{r}
+#| label: Cost Inpatient stay
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+# Calculate count, sum, and avg of IP services
+CalcnetPd_IP <-
+  CHO_Roster2 %>%
+  mutate(Calcnetpd = as.numeric(Calcnetpd)) %>%
+  filter(Svccode %in% c(InpatientStayValueSetList, NonacuteInpatientValueSetList)) %>%
+  group_by(AHCCCSID) %>%
+  summarize(count_calcnetpd_IP = sum(!is.na(Calcnetpd)),
+            total_calcnetpd_IP = sum(Calcnetpd),
+            avg_calcnetpd_IP = mean(Calcnetpd)) %>%
+  ungroup() %>%
+  select(AHCCCSID,
+         count_calcnetpd_IP,
+         total_calcnetpd_IP,
+         avg_calcnetpd_IP)
+
+# Add sum and avg of IP services to CHO
+CHO_Roster1 <-
+  CHO_Roster1 %>%
+  left_join(CalcnetPd_IP, by = "AHCCCSID") 
+
+```
+
 ### Authorized Inpatient Service
 
 This procedure utilizes the Alliance Daily Inpatient Census, which is a daily record obtained from BCBSAZ Health Choice indicating all individuals who are currently inpatient, or who were inpatient and have been discharged. This data is based on authorizations from HC medical management. The Inpatient Census includes cases with admission dates between 2023-01-01 and 2023-12-31.
@@ -523,7 +555,7 @@ CHO_Roster1 <-
         by = "AHCCCSID",
         all.x = TRUE)
 
-Checkit <- CHO_Roster1 |> select(1, 39:60)
+Checkit <- CHO_Roster1 |> select(1, 39:63)
 
 ```
 
@@ -577,7 +609,7 @@ CHO_Roster1 <-
         by = "AHCCCSID",
         all.x = TRUE)
 
-Checkit <- CHO_Roster1 |> select(1, 36:62)
+Checkit <- CHO_Roster1 |> select(1, 36:64)
 
 ```
 
@@ -626,8 +658,38 @@ CHO_Roster1 <-
         by = "AHCCCSID",
         all.x = TRUE)
 
-Checkit <- CHO_Roster1 |> select(1, 36:63)
+Checkit <- CHO_Roster1 |> select(1, 36:65)
 ```
+
+##### Cost:Emergency Department
+
+```{r}
+#| label: Cost ED
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+# Calculate sum and avg of ED services
+CalcnetPd_ED <-
+  CHO_Roster2 %>%
+  mutate(Calcnetpd = as.numeric(Calcnetpd)) %>%
+  filter(Svccode %in% c(EDValueSetList)) %>%
+  group_by(AHCCCSID) %>%
+  summarize(total_calcnetpd_ED = sum(Calcnetpd), avg_calcnetpd_ED = mean(Calcnetpd)) %>%
+  ungroup() |> 
+  select(AHCCCSID,
+         total_calcnetpd_ED,
+         avg_calcnetpd_ED)
+
+# Add sum and avg of IP services to CHO
+CHO_Roster1 <-
+  CHO_Roster1 %>%
+  left_join(CalcnetPd_ED, by = "AHCCCSID") 
+
+```
+
 
 #### Mental Illness and Intentional Self-harm (MISH) Value Set
 
@@ -663,7 +725,34 @@ CHO_Roster1 <-
         by = "AHCCCSID",
         all.x = TRUE)
 
-Checkit <- CHO_Roster1 |> select(1, 36:64)
+Checkit <- CHO_Roster1 |> select(1, 36:68)
+
+```
+
+```{r}
+#| label: Cost MISH
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+# Calculate sum and avg of MISH services
+CalcnetPd_MISH <-
+  CHO_Roster2 %>%
+  mutate(Calcnetpd = as.numeric(Calcnetpd)) %>%
+  filter(Svccode %in% c(MISHValueSetList)) %>%
+  group_by(AHCCCSID) %>%
+  summarize(total_calcnetpd_MISH = sum(Calcnetpd), avg_calcnetpd_MISH = mean(Calcnetpd)) %>%
+  ungroup() |> 
+  select(AHCCCSID,
+         total_calcnetpd_MISH,
+         avg_calcnetpd_MISH)
+
+# Add sum and avg of IP services to CHO
+CHO_Roster1 <-
+  CHO_Roster1 %>%
+  left_join(CalcnetPd_MISH, by = "AHCCCSID") 
 
 ```
 

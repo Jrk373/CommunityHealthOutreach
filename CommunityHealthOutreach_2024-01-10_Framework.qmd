@@ -58,7 +58,7 @@ QRPTP01 <- DBI::dbConnect(odbc::odbc(),"AllianceData")
 #   Column1 = "text")
 
 # Vector of Alliance Provider Name
-Provider_ShortName <- (c("CBI", "CPIH", "EHS", "LCBHC", "MMHC", "SHG", "SBH", "TGC", "WYGC"))
+Provider_ShortName <- (c("CBI", "CPIH", "EHS", "LCBHC", "MMHC", "SHG", "SBHS", "TGC", "PH"))
 
 # Vector of NAZ Counties
 NAZ_Counties <- (c("Apache", "Coconino", "Mohave", "Navajo", "Yavapai"))
@@ -282,6 +282,13 @@ AllianceEnrolledMembers_Merge <-
         y = GM_ALLAZ_Enrollments, # Adds AHCCCSID and BHHShortname
         by = "PrimaryId",
         all.x = TRUE)
+
+AllianceEnrolledMembers_Merge <- 
+  AllianceEnrolledMembers_Merge %>%
+  mutate(
+    BHHShortName = if_else(BHHShortName == "SBH", "SBHS",
+                           if_else(BHHShortName == "WYGC", "PH", BHHShortName))
+  )
 
 AllianceEnrolledMembers_Merge <-
   AllianceEnrolledMembers_Merge |> 
