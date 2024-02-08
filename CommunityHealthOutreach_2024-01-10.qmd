@@ -132,6 +132,26 @@ Z_Codes <- read_xlsx("./documents/Z-Codes.xlsx", sheet = "Sheet1")
 
 ## Procedure
 
+### Enrollment Roster
+
+```{r}
+#| label: Enrollment roster
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+AllianceEnrolledMembers <-
+  AllianceEnrolledMembers |> 
+    mutate(
+    EnrollmentDate = as.Date(EnrollmentDate, format = "%Y-%m-%d"),
+    DisenrollmentDate = as.Date(DisenrollmentDate, format = "%Y-%m-%d"),
+    DaysPerEnrollment = as.numeric(difftime(DisenrollmentDate, EnrollmentDate, units = "days"))
+  )
+
+```
+
 ### VBP Quality Roster
 
 Create an indicator for if member is on VBPQR and add it to the Enrollment Roster
@@ -190,6 +210,11 @@ collapsed_data <- VBPQR_filtered |>
          FUM_Ind = if_else(!is.na(FUM), 1, 0)
          )
 
+# Add the total numbers of VBP measures
+collapsed_data <-
+  collapsed_data |> 
+  mutate(TotalVBP = AMM_Ind + FUH_Ind + FUM_Ind)
+
 # Rename AHCCCSID for enrollment roster
 AllianceEnrolledMembers <-
   AllianceEnrolledMembers |> 
@@ -203,7 +228,7 @@ CHO_Roster1 <-
         all.x = TRUE)
 
 # Check it and see, you're hot blooded :)
-Checkit <- CHO_Roster1 |> select(1, 36:41)
+Checkit <- CHO_Roster1 |> select(1, 36:43)
 ```
 
 ### Claims
@@ -301,7 +326,7 @@ ProviderTINMatch <-
   CHO_Roster2 |> 
   mutate(SvcByAssignedBHHTIN = if_else(Fedtaxid == BHHProvider_TIN | RenderingProviderNpi == HHPrescriberNPI$NPI, 1, 0)) |> 
   mutate(SvcByOtherTIN = if_else(Fedtaxid != BHHProvider_TIN & RenderingProviderNpi != HHPrescriberNPI$NPI, 1, 0)) |> 
-  select(1, 70, 71)
+  select(1, 72, 73)
 
 # Collapse data to a single row per person
 
@@ -329,13 +354,15 @@ CHO_Roster1 <-
         all.x = TRUE)
 
 # Check it
-Checkit <- CHO_Roster1 |> select(1, 36:45)
+Checkit <- CHO_Roster1 |> select(1, 36:47)
 
 ```
 
 ### Social Risk Factors 
 
 These indicate if a person has a "Z-Code" diagnosis for each of several categories of social risk factors. In addition, this section provides a summary of the quantity of social risk factors experienced by a given individual.
+
+#### All Z-Codes
 
 ```{r}
 #| label: Z Code indicators
@@ -434,7 +461,40 @@ CHO_Roster1 <-
         by = "AHCCCSID",
         all.x = TRUE)
 
-Checkit <- CHO_Roster1 |> select(1, 36:57)
+Checkit <- CHO_Roster1 |> select(1, 36:59)
+
+```
+
+#### Homelessness
+
+```{r}
+#| label: Z Code HOmelessness
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+# Create a new column 'Homelessness' with default value 0
+CHO_Roster2$Homelessness <- 0
+
+# Check each column for the homelessness values 'Z59.00, Z59.01, and Z59.02'
+for (col in c("PrimaryDiagnosis", "Dx1", "Dx2", "DX3", "Dx4", "Dx5", "DX6", "Dx7", "Dx8", "DX9", "Dx10", "Dx11", "DX12")) {
+  CHO_Roster2$Homelessness[CHO_Roster2[[col]] == c("Z59.00", "Z59.01", "Z59.02")] <- 1
+}
+
+# Group by AHCCCSID and check for the presence of 1 in Homelessness column
+collapsed_data <- CHO_Roster2 |>
+  group_by(AHCCCSID) |>
+  summarise(Homelessness = as.integer(any(Homelessness == 1)))
+
+CHO_Roster1 <-
+  merge(x = CHO_Roster1,
+        y = collapsed_data,
+        by = "AHCCCSID",
+        all.x = TRUE)
+
+Checkit <- CHO_Roster1 |> select(1, 36:60)
 
 ```
 
@@ -484,11 +544,13 @@ CHO_Roster1 <-
         by = "AHCCCSID",
         all.x = TRUE)
 
-Checkit <- CHO_Roster1 |> select(1, 36:58)
+Checkit <- CHO_Roster1 |> select(1, 36:61)
 
 ```
 
 #### Cost: Inpatient Services
+
+This assesses the cost of a given members inpatient stays for all inpatient and nonacute inpatient values.
 
 ```{r}
 #| label: Cost Inpatient stay
@@ -498,25 +560,47 @@ Checkit <- CHO_Roster1 |> select(1, 36:58)
 #| warning: false
 #| error: false
 
-# Calculate count, sum, and avg of IP services
+# Calculate count, sum, and avg of IP services (all values)
 CalcnetPd_IP <-
   CHO_Roster2 %>%
   mutate(Calcnetpd = as.numeric(Calcnetpd)) %>%
   filter(Svccode %in% c(InpatientStayValueSetList, NonacuteInpatientValueSetList)) %>%
   group_by(AHCCCSID) %>%
-  summarize(count_calcnetpd_IP = sum(!is.na(Calcnetpd)),
+  summarize(count_IP = sum(!is.na(Calcnetpd)),
             total_calcnetpd_IP = sum(Calcnetpd),
-            avg_calcnetpd_IP = mean(Calcnetpd)) %>%
+            avg_calcnetpd_IP = mean(Calcnetpd)) |> 
   ungroup() %>%
   select(AHCCCSID,
-         count_calcnetpd_IP,
+         count_IP,
          total_calcnetpd_IP,
          avg_calcnetpd_IP)
+
+# Add count, sum, and avg of IP services to CHO
+CHO_Roster1 <-
+  CHO_Roster1 %>%
+  left_join(CalcnetPd_IP, by = "AHCCCSID") 
+
+# Calculate count, sum, and avg of IP services if they are 0124 or 0126
+CalcnetPd_0124 <-
+  CHO_Roster2 %>%
+  mutate(Calcnetpd = as.numeric(Calcnetpd)) %>%
+  filter(Svccode %in% c("0124", "0126")) %>%
+  group_by(AHCCCSID) %>%
+  summarize(count_0124 = sum(!is.na(Calcnetpd)),
+            total_calcnetpd_0124 = sum(Calcnetpd),
+            avg_calcnetpd_0124 = mean(Calcnetpd)) |> 
+  ungroup() %>%
+  select(AHCCCSID,
+         count_0124,
+         total_calcnetpd_0124,
+         avg_calcnetpd_0124)
 
 # Add sum and avg of IP services to CHO
 CHO_Roster1 <-
   CHO_Roster1 %>%
-  left_join(CalcnetPd_IP, by = "AHCCCSID") 
+  left_join(CalcnetPd_0124, by = "AHCCCSID") 
+
+Checkit <- CHO_Roster1 |> select(1, 36:67)
 
 ```
 
@@ -526,7 +610,7 @@ This procedure utilizes the Alliance Daily Inpatient Census, which is a daily re
 
 #### All authorized inpatient stays
 
-This will provide an indicator to the CHO Roster for any case that has an inpatient admission date.
+This will provide an indicator to the CHO Roster for any case that has an inpatient admission date that was included in the authorized inpatient service data provided by HCA.
 
 ```{r}
 #| label: Inpatient Census
@@ -543,7 +627,7 @@ CHO_Roster1 <-
 
 # Count the number of admissions for each AHCCCS ID on the Inpatient Census
 
-# Create a summary table grouping by AHCCCSID
+# Create a summary table grouping by AHCCCSID that counts the number of authorized inpatient admissions
 summary_table <- 
   InpatientCensus |>
   group_by(AHCCCSID) |>
@@ -555,7 +639,7 @@ CHO_Roster1 <-
         by = "AHCCCSID",
         all.x = TRUE)
 
-Checkit <- CHO_Roster1 |> select(1, 39:63)
+Checkit <- CHO_Roster1 |> select(1, 39:69)
 
 ```
 
@@ -573,7 +657,7 @@ This procedure will calculate an individuals length of stay in an authorized inp
 
 InpatientCensus <-
   InpatientCensus |> 
-  mutate(DischargeDate = if_else(is.na(DischargeDate), "2023-12-31", DischargeDate)) |> 
+  mutate(DischargeDate = if_else(is.na(DischargeDate), "2023-12-31", DischargeDate)) |> #assigns 12/31/2023 to any cases who had not discharged as of the end of the 2023 calendar year to coincide with this range of data
   mutate(AdmissionDate = as.Date(AdmissionDate),
          DischargeDate = as.Date(DischargeDate))
 
@@ -583,7 +667,7 @@ summary_table <-
   mutate(LOS = DischargeDate - AdmissionDate) |> 
   select(AHCCCSID, LOS)
 
-# Group by AHCCCSID, arrange by LOS in descending order, and select the first row for each group
+# Group by AHCCCSID, arrange by LOS in descending order, and select the first row (max) for each group
 max_los_table <- 
   summary_table |>
   group_by(AHCCCSID) |>
@@ -609,14 +693,13 @@ CHO_Roster1 <-
         by = "AHCCCSID",
         all.x = TRUE)
 
-Checkit <- CHO_Roster1 |> select(1, 36:64)
+Checkit <- CHO_Roster1 |> select(1, 36:71)
 
 ```
 
 #### Discharge Dispositions
 
-*This is a topic that we can explore further. The data is somewhat irregular and would require interpretation.*
-
+*This is a topic that we can explore further. The data is somewhat irregular and would require interpretation. For now it is not being included*
 
 ### Emergency Department Visits 
 
@@ -658,7 +741,7 @@ CHO_Roster1 <-
         by = "AHCCCSID",
         all.x = TRUE)
 
-Checkit <- CHO_Roster1 |> select(1, 36:65)
+Checkit <- CHO_Roster1 |> select(1, 36:72)
 ```
 
 ##### Cost:Emergency Department
@@ -677,9 +760,12 @@ CalcnetPd_ED <-
   mutate(Calcnetpd = as.numeric(Calcnetpd)) %>%
   filter(Svccode %in% c(EDValueSetList)) %>%
   group_by(AHCCCSID) %>%
-  summarize(total_calcnetpd_ED = sum(Calcnetpd), avg_calcnetpd_ED = mean(Calcnetpd)) %>%
+  summarize(count_ED = sum(!is.na(Calcnetpd)),
+            total_calcnetpd_ED = sum(Calcnetpd), 
+            avg_calcnetpd_ED = mean(Calcnetpd)) %>%
   ungroup() |> 
   select(AHCCCSID,
+         count_ED,
          total_calcnetpd_ED,
          avg_calcnetpd_ED)
 
@@ -687,6 +773,8 @@ CalcnetPd_ED <-
 CHO_Roster1 <-
   CHO_Roster1 %>%
   left_join(CalcnetPd_ED, by = "AHCCCSID") 
+
+Checkit <- CHO_Roster1 |> select(1, 36:75)
 
 ```
 
@@ -709,10 +797,13 @@ MISHValueSet <- MyHEDIS2023_AllValueSetsToCodes |>
 # Extract the associated code values as a vector
 MISHValueSetList <- MISHValueSet$Code
 
-# create the indicator column
-CHO_Roster2 <-
-  CHO_Roster2 |> 
-  mutate(MISH = if_else(Svccode %in% MISHValueSetList, 1, 0))
+# Create a new column 'Homelessness' with default value 0
+CHO_Roster2$MISH <- 0
+
+# Check each column for the homelessness values 'Z59.00, Z59.01, and Z59.02'
+for (col in c("PrimaryDiagnosis", "Dx1", "Dx2", "Dx3", "Dx4", "Dx5", "Dx6", "Dx7", "Dx8", "Dx9", "Dx10", "Dx11", "Dx12")) {
+  CHO_Roster2$MISH[CHO_Roster2[[col]] %in% MISHValueSetList] <- 1
+}
 
 # Group by AHCCCSID and check for the presence of 1 in Inpatient column
 collapsed_data <- CHO_Roster2 |>
@@ -725,7 +816,7 @@ CHO_Roster1 <-
         by = "AHCCCSID",
         all.x = TRUE)
 
-Checkit <- CHO_Roster1 |> select(1, 36:68)
+Checkit <- CHO_Roster1 |> select(1, 36:76)
 
 ```
 
@@ -737,28 +828,50 @@ Checkit <- CHO_Roster1 |> select(1, 36:68)
 #| warning: false
 #| error: false
 
-# Calculate sum and avg of MISH services
-CalcnetPd_MISH <-
-  CHO_Roster2 %>%
+# Calculate sum and avg of AOD services
+CalcnetPd_MISH <- CHO_Roster2 %>%
   mutate(Calcnetpd = as.numeric(Calcnetpd)) %>%
-  filter(Svccode %in% c(MISHValueSetList)) %>%
+  filter(
+    PrimaryDiagnosis %in% MISHValueSetList |
+    Dx1 %in% MISHValueSetList |
+    Dx2 %in% MISHValueSetList |
+    Dx3 %in% MISHValueSetList |
+    Dx4 %in% MISHValueSetList |
+    Dx5 %in% MISHValueSetList |
+    Dx6 %in% MISHValueSetList |
+    Dx7 %in% MISHValueSetList |
+    Dx8 %in% MISHValueSetList |
+    Dx9 %in% MISHValueSetList |
+    Dx10 %in% MISHValueSetList |
+    Dx11 %in% MISHValueSetList |
+    Dx12 %in% MISHValueSetList
+  ) %>%
   group_by(AHCCCSID) %>%
-  summarize(total_calcnetpd_MISH = sum(Calcnetpd), avg_calcnetpd_MISH = mean(Calcnetpd)) %>%
-  ungroup() |> 
-  select(AHCCCSID,
-         total_calcnetpd_MISH,
-         avg_calcnetpd_MISH)
+  summarize(
+    count_MISH = sum(!is.na(Calcnetpd)),
+    total_calcnetpd_MISH = sum(Calcnetpd), 
+    avg_calcnetpd_MISH = mean(Calcnetpd)
+  ) %>%
+  ungroup() %>%
+  select(
+    AHCCCSID,
+    count_MISH,
+    total_calcnetpd_MISH,
+    avg_calcnetpd_MISH
+  )
 
 # Add sum and avg of IP services to CHO
 CHO_Roster1 <-
   CHO_Roster1 %>%
   left_join(CalcnetPd_MISH, by = "AHCCCSID") 
 
+Checkit <- CHO_Roster1 |> select(1, 36:79)
+
 ```
 
 ### Antidepressant Medication 
 
-Indicator according to NCQA MY 2024 standards for Follow Up after Antidepressant Medications (AMM) values sets.
+Indicator according to NCQA MY 2024 standards for Antidepressant Medication Management (AMM) values sets.
 
 ```{r}
 #| label: Antidepressant Medications
@@ -794,7 +907,41 @@ CHO_Roster1 <-
         by = "AHCCCSID",
         all.x = TRUE)
 
-Checkit <- CHO_Roster1 |> select(1, 36:65)
+Checkit <- CHO_Roster1 |> select(1, 36:80)
+
+```
+
+#### Cost: Antidepressant Medication
+
+```{r}
+#| label: Cost AM
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+# Calculate sum and avg of am services
+CalcnetPd_AM <-
+  CHO_Roster2 %>%
+  mutate(Calcnetpd = as.numeric(Calcnetpd)) %>%
+  filter(MedicationNDC %in% c(AntidressantMedicationsValueSetList)) %>%
+  group_by(AHCCCSID) %>%
+  summarize(count_AM = sum(!is.na(Calcnetpd)),
+            total_calcnetpd_AM = sum(Calcnetpd), 
+            avg_calcnetpd_AM = mean(Calcnetpd)) %>%
+  ungroup() |> 
+  select(AHCCCSID,
+         count_AM,
+         total_calcnetpd_AM,
+         avg_calcnetpd_AM)
+
+# Add sum and avg of IP services to CHO
+CHO_Roster1 <-
+  CHO_Roster1 %>%
+  left_join(CalcnetPd_AM, by = "AHCCCSID") 
+
+Checkit <- CHO_Roster1 |> select(1, 36:83)
 
 ```
 
@@ -822,14 +969,13 @@ AODAbuseandDependenceValueSet <- MyHEDIS2023_AllValueSetsToCodes |>
 # Extract the associated code values as a vector
 AODAbuseandDependenceValueSetList <- AODAbuseandDependenceValueSet$Code
 
-# Create a new column AOD and set it to 1 if any of the Dx columns contain the specified values, else set it to 0
-CHO_Roster2 <- CHO_Roster2 |>
-  mutate(AOD = as.integer(rowSums(across(starts_with("Dx"), ~. %in% AODAbuseandDependenceValueSetList)) > 0))
+# Create a new column 'Homelessness' with default value 0
+CHO_Roster2$AOD <- 0
 
-# Create a new column AOD and set it to 1 if any of the Dx or PrimaryDiagnosis columns contain the specified values, else set it to 0
-CHO_Roster2 <- CHO_Roster2 |>
-  mutate(AOD = as.integer(rowSums(across(starts_with("Dx"), ~. %in% AODAbuseandDependenceValueSetList)) > 0 |
-                              PrimaryDiagnosis %in% AODAbuseandDependenceValueSetList))
+# Check each column for the homelessness values 'Z59.00, Z59.01, and Z59.02'
+for (col in c("PrimaryDiagnosis", "Dx1", "Dx2", "Dx3", "Dx4", "Dx5", "Dx6", "Dx7", "Dx8", "Dx9", "Dx10", "Dx11", "Dx12")) {
+  CHO_Roster2$AOD[CHO_Roster2[[col]] %in% AODAbuseandDependenceValueSetList] <- 1
+}
 
 # Group by AHCCCSID and check for the presence of 1 in Inpatient column
 collapsed_data <- CHO_Roster2 |>
@@ -842,7 +988,58 @@ CHO_Roster1 <-
         by = "AHCCCSID",
         all.x = TRUE)
 
-Checkit <- CHO_Roster1 |> select(1, 36:66)
+Checkit <- CHO_Roster1 |> select(1, 36:84)
+```
+
+##### Cost: Alcohol Abuse and Dependence
+
+```{r}
+#| label: Cost AOD
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+# Calculate sum and avg of AOD services
+CalcnetPd_AOD <- CHO_Roster2 %>%
+  mutate(Calcnetpd = as.numeric(Calcnetpd)) %>%
+  filter(
+    PrimaryDiagnosis %in% AODAbuseandDependenceValueSetList |
+    Dx1 %in% AODAbuseandDependenceValueSetList |
+    Dx2 %in% AODAbuseandDependenceValueSetList |
+    Dx3 %in% AODAbuseandDependenceValueSetList |
+    Dx4 %in% AODAbuseandDependenceValueSetList |
+    Dx5 %in% AODAbuseandDependenceValueSetList |
+    Dx6 %in% AODAbuseandDependenceValueSetList |
+    Dx7 %in% AODAbuseandDependenceValueSetList |
+    Dx8 %in% AODAbuseandDependenceValueSetList |
+    Dx9 %in% AODAbuseandDependenceValueSetList |
+    Dx10 %in% AODAbuseandDependenceValueSetList |
+    Dx11 %in% AODAbuseandDependenceValueSetList |
+    Dx12 %in% AODAbuseandDependenceValueSetList
+  ) %>%
+  group_by(AHCCCSID) %>%
+  summarize(
+    count_AOD = sum(!is.na(Calcnetpd)),
+    total_calcnetpd_AOD = sum(Calcnetpd), 
+    avg_calcnetpd_AOD = mean(Calcnetpd)
+  ) %>%
+  ungroup() %>%
+  select(
+    AHCCCSID,
+    count_AOD,
+    total_calcnetpd_AOD,
+    avg_calcnetpd_AOD
+  )
+
+# Add sum and avg of IP services to CHO
+CHO_Roster1 <-
+  CHO_Roster1 %>%
+  left_join(CalcnetPd_AOD, by = "AHCCCSID") 
+
+Checkit <- CHO_Roster1 |> select(1, 50:87)
+
 ```
 
 #### Unintentional Overdose
@@ -865,10 +1062,13 @@ UnintentionalDrugOverdoseValueSet <- MyHEDIS2023_AllValueSetsToCodes |>
 # Extract the associated code values as a vector
 UnintentionalDrugOverdoseValueSetList <- UnintentionalDrugOverdoseValueSet$Code
 
-# Create a new column AOD and set it to 1 if any of the Dx or PrimaryDiagnosis columns contain the specified values, else set it to 0
-CHO_Roster2 <- CHO_Roster2 |>
-  mutate(UOD = as.integer(rowSums(across(starts_with("Dx"), ~. %in% UnintentionalDrugOverdoseValueSetList)) > 0 |
-                              PrimaryDiagnosis %in% UnintentionalDrugOverdoseValueSetList))
+# Create a new column 'Homelessness' with default value 0
+CHO_Roster2$UOD <- 0
+
+# Check each column for the homelessness values 'Z59.00, Z59.01, and Z59.02'
+for (col in c("PrimaryDiagnosis", "Dx1", "Dx2", "Dx3", "Dx4", "Dx5", "Dx6", "Dx7", "Dx8", "Dx9", "Dx10", "Dx11", "Dx12")) {
+  CHO_Roster2$UOD[CHO_Roster2[[col]] %in% UnintentionalDrugOverdoseValueSetList] <- 1
+}
 
 # Group by AHCCCSID and check for the presence of 1 in Inpatient column
 collapsed_data <- CHO_Roster2 |>
@@ -881,7 +1081,58 @@ CHO_Roster1 <-
         by = "AHCCCSID",
         all.x = TRUE)
 
-Checkit <- CHO_Roster1 |> select(1, 36:67)
+Checkit <- CHO_Roster1 |> select(1, 50:88)
+```
+
+##### Cost: Unintentional overdose
+
+```{r}
+#| label: Cost AOD
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+# Calculate sum and avg of AOD services
+CalcnetPd_UOD <- CHO_Roster2 %>%
+  mutate(Calcnetpd = as.numeric(Calcnetpd)) %>%
+  filter(
+    PrimaryDiagnosis %in% UnintentionalDrugOverdoseValueSetList |
+    Dx1 %in% UnintentionalDrugOverdoseValueSetList |
+    Dx2 %in% UnintentionalDrugOverdoseValueSetList |
+    Dx3 %in% UnintentionalDrugOverdoseValueSetList |
+    Dx4 %in% UnintentionalDrugOverdoseValueSetList |
+    Dx5 %in% UnintentionalDrugOverdoseValueSetList |
+    Dx6 %in% UnintentionalDrugOverdoseValueSetList |
+    Dx7 %in% UnintentionalDrugOverdoseValueSetList |
+    Dx8 %in% UnintentionalDrugOverdoseValueSetList |
+    Dx9 %in% UnintentionalDrugOverdoseValueSetList |
+    Dx10 %in% UnintentionalDrugOverdoseValueSetList |
+    Dx11 %in% UnintentionalDrugOverdoseValueSetList |
+    Dx12 %in% UnintentionalDrugOverdoseValueSetList
+  ) %>%
+  group_by(AHCCCSID) %>%
+  summarize(
+    count_UOD = sum(!is.na(Calcnetpd)),
+    total_calcnetpd_UOD = sum(Calcnetpd), 
+    avg_calcnetpd_UOD = mean(Calcnetpd)
+  ) %>%
+  ungroup() %>%
+  select(
+    AHCCCSID,
+    count_UOD,
+    total_calcnetpd_UOD,
+    avg_calcnetpd_UOD
+  )
+
+# Add sum and avg of IP services to CHO
+CHO_Roster1 <-
+  CHO_Roster1 %>%
+  left_join(CalcnetPd_UOD, by = "AHCCCSID") 
+
+Checkit <- CHO_Roster1 |> select(1, 60:87)
+
 ```
 
 ### Major Depressive Disorder
@@ -896,7 +1147,7 @@ Checkit <- CHO_Roster1 |> select(1, 36:67)
 
 # Major Depressive Disorder
 
-# Filter the MyHEDIS2023_MedicationDirectory for "Unintentional Drug Overdose"
+# Filter the MyHEDIS2023_MedicationDirectory for "MDD"
 MajorDepressionValueSet <- MyHEDIS2023_AllValueSetsToCodes |>
   mutate_all(~str_trim(., side = "right")) |> # trim off extra spaces
   filter(`Value Set Name` == "Major Depression")
@@ -904,10 +1155,14 @@ MajorDepressionValueSet <- MyHEDIS2023_AllValueSetsToCodes |>
 # Extract the associated code values as a vector
 MajorDepressionValueSetList <- MajorDepressionValueSet$Code
 
-# Create a new column AOD and set it to 1 if any of the Dx or PrimaryDiagnosis columns contain the specified values, else set it to 0
-CHO_Roster2 <- CHO_Roster2 |>
-  mutate(MDD = as.integer(rowSums(across(starts_with("Dx"), ~. %in% MajorDepressionValueSetList)) > 0 |
-                              PrimaryDiagnosis %in% MajorDepressionValueSetList))
+# Create a new column 'Homelessness' with default value 0
+CHO_Roster2$MDD <- 0
+
+# Check each column for the homelessness values 'Z59.00, Z59.01, and Z59.02'
+for (col in c("PrimaryDiagnosis", "Dx1", "Dx2", "Dx3", "Dx4", "Dx5", "Dx6", "Dx7", "Dx8", "Dx9", "Dx10", "Dx11", "Dx12")) {
+  CHO_Roster2$MDD[CHO_Roster2[[col]] %in% MajorDepressionValueSetList] <- 1
+}
+
 
 # Group by AHCCCSID and check for the presence of 1 in Inpatient column
 collapsed_data <- CHO_Roster2 |>
@@ -920,7 +1175,58 @@ CHO_Roster1 <-
         by = "AHCCCSID",
         all.x = TRUE)
 
-Checkit <- CHO_Roster1 |> select(1, 36:68)
+Checkit <- CHO_Roster1 |> select(1, 70:92)
+```
+
+#### Cost: Major Depressive Disorder
+
+```{r}
+#| label: Cost AOD
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+# Calculate sum and avg of AOD services
+CalcnetPd_MDD <- CHO_Roster2 %>%
+  mutate(Calcnetpd = as.numeric(Calcnetpd)) %>%
+  filter(
+    PrimaryDiagnosis %in% MajorDepressionValueSetList |
+    Dx1 %in% MajorDepressionValueSetList |
+    Dx2 %in% MajorDepressionValueSetList |
+    Dx3 %in% MajorDepressionValueSetList |
+    Dx4 %in% MajorDepressionValueSetList |
+    Dx5 %in% MajorDepressionValueSetList |
+    Dx6 %in% MajorDepressionValueSetList |
+    Dx7 %in% MajorDepressionValueSetList |
+    Dx8 %in% MajorDepressionValueSetList |
+    Dx9 %in% MajorDepressionValueSetList |
+    Dx10 %in% MajorDepressionValueSetList |
+    Dx11 %in% MajorDepressionValueSetList |
+    Dx12 %in% MajorDepressionValueSetList
+  ) %>%
+  group_by(AHCCCSID) %>%
+  summarize(
+    count_MDD = sum(!is.na(Calcnetpd)),
+    total_calcnetpd_MDD = sum(Calcnetpd), 
+    avg_calcnetpd_MDD = mean(Calcnetpd)
+  ) %>%
+  ungroup() %>%
+  select(
+    AHCCCSID,
+    count_MDD,
+    total_calcnetpd_MDD,
+    avg_calcnetpd_MDD
+  )
+
+# Add sum and avg of IP services to CHO
+CHO_Roster1 <-
+  CHO_Roster1 %>%
+  left_join(CalcnetPd_MDD, by = "AHCCCSID") 
+
+Checkit <- CHO_Roster1 |> select(1, 80:95)
+
 ```
 
 ### BIPOC
@@ -954,7 +1260,7 @@ CHO_Roster1 <- CHO_Roster1 |>
 
 
 
-Checkit <- CHO_Roster1 |> select(1, 20:25, 36:72)
+Checkit <- CHO_Roster1 |> select(1, 80:99)
 ```
 
 ### Crisis Services
@@ -1026,9 +1332,7 @@ CHO_Roster1 <-
         by = "AHCCCSID",
         all.x = TRUE)
 
-Checkit <-
-  CHO_Roster1 |> 
-  select(1, 70:74)
+Checkit <- CHO_Roster1 |> select(1, 80:102)
 ```
 
 ### Peer and Family Run Organization (PFro) Services
@@ -1059,9 +1363,7 @@ CHO_Roster1 <-
         by = "AHCCCSID",
         all.x = TRUE)
 
-Checkit <-
-  CHO_Roster1 |> 
-  select(1, 75)
+Checkit <- CHO_Roster1 |> select(1, 80:103)
 ```
 
 ### Marriage, is what bwings us togevah today
@@ -1081,9 +1383,7 @@ CHO_Roster1 <-
          DivorcedOrSeparated = if_else(MaritalStatus %in% c("Divorced", "Legally Separated"), 1, 0)
          )
 
-Checkit <-
-  CHO_Roster1 |> 
-  select(1, 76:77)
+Checkit <- CHO_Roster1 |> select(1, 80:105)
 ```
 
 ### Employment
@@ -1123,9 +1423,7 @@ CHO_Roster1 <-
         all.x = TRUE)
 
 
-Checkit <-
-  CHO_Roster1 |> 
-  select(1, 76:81)
+Checkit <- CHO_Roster1 |> select(1, 80:109)
 
 ```
 
@@ -1147,9 +1445,7 @@ CHO_Roster1 <-
          NonEnglishSpeaking = if_else(SpokenLanguage != "ENGLISH", 1, 0)
   )
 
-Checkit <-
-  CHO_Roster1 |> 
-  select(1, 82:84)
+Checkit <- CHO_Roster1 |> select(1, 80:112)
 ```
 
 ```{r}
