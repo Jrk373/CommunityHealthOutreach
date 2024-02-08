@@ -1,0 +1,45 @@
+---
+title: "CHO Analysis"
+format: html
+editor: visual
+---
+
+# Setup
+
+```{r}
+
+library(tidyverse)
+
+```
+
+# Pre-Load Data
+
+```{r}
+
+Data_CHO_Roster1 <- read.csv("./data/output/CHO_Roster1.csv")
+
+```
+
+# Calculate Total Days of enrollment
+
+```{r}
+
+TotsEnrolledDays <-
+  Data_CHO_Roster1 %>%
+  group_by(AHCCCSID) %>%
+  summarize(TotalDaysEnrolled = sum(DaysPerEnrollment, na.rm = TRUE))
+  
+CHO_Analysis1 <-
+  Data_CHO_Roster1 %>%
+  group_by(AHCCCSID) %>%
+  filter(EnrollmentDate == max(EnrollmentDate))
+
+CHO_Analysis1 <-
+  merge(x = CHO_Analysis1,
+        y = TotsEnrolledDays,
+        by = "AHCCCSID",
+        all.x = TRUE)
+
+CHO_Analysis1 <- CHO_Analysis1[, -c(2,3)]
+
+```

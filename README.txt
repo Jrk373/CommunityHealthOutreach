@@ -18,7 +18,3 @@ Start Here:
 Handy Code:
   - CHO_Roster1 <- CHO_Roster1[,-c(59,60)]
   
-  
-Remove all items from environment except...
-  - rm(list = setdiff(ls(), c("AllianceEnrolledMembers", "Claims_AllHCA", "ContractMeasures", "Data_VBPQR_AllRecords", "HHPrescriberNPI", "InpatientCensus", "MyHEDIS2023_AllValueSetsToCodes", "MyHEDIS2023_MedicationDirectory", "NAZ_Counties", "Provider_ShortName", "ProviderTIN", VBPTrendReport_colnames", "Z_Codes", "CHO_Roster1", "CHO_Roster2")))
-

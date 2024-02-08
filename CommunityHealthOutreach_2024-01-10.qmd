@@ -1448,9 +1448,52 @@ CHO_Roster1 <-
 Checkit <- CHO_Roster1 |> select(1, 80:112)
 ```
 
-```{r}
+### Total Enrolled days
 
-write.csv(CHO_Roster1, "./data/output/CHO_Roster1.csv")
+This last piece takes a sum of all of the days enrolled for all enrollment segments. It then selects ONLY the most recent enrollment segment for each members.
+
+```{r}
+#| label: Total enrolled days
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+
+# SUm up all days from all segments
+TotsEnrolledDays <-
+  CHO_Roster1 %>%
+  group_by(AHCCCSID) %>%
+  summarize(TotalDaysEnrolled = sum(DaysPerEnrollment, na.rm = TRUE))
+
+# Filter for only the most recent enrollment segment
+CHO_Roster_Final <-
+  CHO_Roster1 %>%
+  group_by(AHCCCSID) %>%
+  filter(EnrollmentDate == max(EnrollmentDate))
+
+# Merge with the total enrollment days per members
+CHO_Roster_Final <-
+  merge(x = CHO_Roster_Final,
+        y = TotsEnrolledDays,
+        by = "AHCCCSID",
+        all.x = TRUE)
+
+# Remove extra columns "X"
+CHO_Roster_Final <- CHO_Roster_Final[, -c(2)]
+
+```
+
+```{r}
+#| label: Write to CSV
+#| eval: true
+#| include: false
+#| echo: false
+#| warning: false
+#| error: false
+ 
+write.csv(CHO_Roster_Final, "./data/output/CHO_Roster_Final.csv")
+
 
 ```
 
