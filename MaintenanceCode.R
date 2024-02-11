@@ -17,6 +17,7 @@ objects_to_keep <- c(
   "Z_Codes", 
   "CHO_Roster1", 
   "CHO_Roster2",
+  "Data_CHO_Roster1",
   "CHO_Roster_Anonymous"
 )
 
