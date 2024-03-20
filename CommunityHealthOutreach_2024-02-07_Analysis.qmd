@@ -16,30 +16,108 @@ library(tidyverse)
 
 ```{r}
 
-Data_CHO_Roster1 <- read.csv("./data/output/CHO_Roster1.csv")
+CHO_Roster_Final <- read.csv("./data/output/CHO_Roster_Final.csv")
+Data_CHO_Roster1 <- CHO_Roster_Final
 
 ```
 
-# Calculate Total Days of enrollment
+# Data Wrangling
 
 ```{r}
 
-TotsEnrolledDays <-
+# Select most recent enrollment date, creates 1 line per member
+Data_CHO_Roster1 <-
   Data_CHO_Roster1 %>%
   group_by(AHCCCSID) %>%
-  summarize(TotalDaysEnrolled = sum(DaysPerEnrollment, na.rm = TRUE))
-  
-CHO_Analysis1 <-
-  Data_CHO_Roster1 %>%
-  group_by(AHCCCSID) %>%
-  filter(EnrollmentDate == max(EnrollmentDate))
+  slice_tail(n = 1) %>%
+  ungroup()
 
-CHO_Analysis1 <-
-  merge(x = CHO_Analysis1,
-        y = TotsEnrolledDays,
-        by = "AHCCCSID",
-        all.x = TRUE)
+# filter any one that did not have any claims in the year
+Data_CHO_Roster1 <-
+  Data_CHO_Roster1 |> 
+  filter(AHCCCSID %in% Claims_AllAlliance$AHCCCSID)
 
-CHO_Analysis1 <- CHO_Analysis1[, -c(2,3)]
+# Select columns
+Data_CHO_Roster1_select <-
+  Data_CHO_Roster1 |> 
+  select(BHHShortName,
+         DOB,
+         Sex,
+         ZCodePresent,
+         Sum_ZCode,
+         Inpatient,
+         count_0124,
+         total_calcnetpd_0124,
+         avg_calcnetpd_0124,
+         ED,
+         count_ED,
+         avg_calcnetpd_ED,
+         AOD,
+         MDD,
+         Race_BIPOC,
+         Married,
+         Employed
+  )
+
+
+# Convert DOB to Age
+CHO_Roster_Anonymous <- 
+  Data_CHO_Roster1_select %>%
+    mutate(Age = round(as.numeric(difftime(Sys.Date(), as.Date(DOB), units = "days") / 365.25))) |> 
+  select(-c(DOB))
+
+# Randomly rearrange columns
+# Randomly rearrange the columns
+CHO_Roster_Anonymous <- CHO_Roster_Anonymous[, sample(ncol(CHO_Roster_Anonymous))]
+
+
+# Randomly assign provider values
+# Create a vector of the values to be assigned
+values <- c("Yoda", "LukeSkywalker", "AhsokaTano", "Chewbacca", "Omega")
+
+# Set the number of values to be assigned
+n <- 58279
+
+# Use the sample function to randomly assign the values
+CHO_Roster_Anonymous$BHHShortName <- sample(values, n, replace = TRUE)
+
+# Select Columns
+CommunityHealthRoster <-
+  CHO_Roster_Anonymous |> 
+    select(BHHShortName,
+         Age,
+         Sex,
+         ZCodePresent,
+         Sum_ZCode,
+         Inpatient,
+         count_0124,
+         total_calcnetpd_0124,
+         avg_calcnetpd_0124,
+         ED,
+         count_ED,
+         avg_calcnetpd_ED,
+         AOD,
+         MDD,
+         Race_BIPOC,
+         Married,
+         Employed
+  ) |> 
+  rename(ProviderName = "BHHShortName",
+         Social_Risk_Factor = "ZCodePresent",
+         Num_Social_Risk_Factors = "Sum_ZCode",
+         Inpatient_Psych_Service = "Inpatient",
+         Num_IP_Facility_Days = "count_0124",
+         Total_Cost_IP_Facility_Days = "total_calcnetpd_0124",
+         Avg_Cost_IP_Facility_Days = "avg_calcnetpd_0124",
+         Emergency_Dept_Service = "ED",
+         Num_Emergency_Dept_Services = "count_ED",
+         Avg_Cost_Emergency_Dept_Services = "avg_calcnetpd_ED",
+         Alcohol_or_Drug_Diagnosis = "AOD",
+         Major_Depressive_Disorder_Diagnosis = "MDD",
+         Race_Black_Indigenous_PeopleOfColor = "Race_BIPOC"
+         )
+
+# write to CSV
+write.csv(CommunityHealthRoster, "./data/output/CommunityHealthRoster_Demo.csv")
 
 ```

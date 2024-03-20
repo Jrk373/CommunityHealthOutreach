@@ -661,6 +661,7 @@ SELECT
     Population,
     RA,
     Svccode,
+    Modifier1, Modifier2, Modifier3, Modifier4,
     Units,
     BegDate,
     PrimaryDiagnosis,
@@ -709,8 +710,8 @@ The table PBM.dbo.HCICPharmacyClaimSummary provides more granular details on med
 
 -- This provides pharmacy claim data from the pharmacy benefit manager
 
-Declare @start as date = '10-01-2022'
-Declare @end as date = '09-30-2023'
+Declare @start as date = '01-01-2023'
+Declare @end as date = '12-31-2023'
 
 SELECT
   MemberAhcccsId AS 'AHCCCSID',

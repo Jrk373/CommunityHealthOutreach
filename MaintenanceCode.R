@@ -18,7 +18,7 @@ objects_to_keep <- c(
   "CHO_Roster1", 
   "CHO_Roster2",
   "Data_CHO_Roster1",
-  "CHO_Roster_Anonymous"
+  "CommunityHealthRoster"
 )
 
 # Get a list of all objects in the environment
